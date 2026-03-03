@@ -29,6 +29,17 @@
     .lock { font-size: 0.8rem; color: #9ca3af; }
     .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
     .badge-owner { background: #dbeafe; color: #1e40af; }
+    /* Lobby ribbon */
+    .lobby-ribbon { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.5rem 0 0.6rem; margin-bottom: 1.25rem; border-bottom: 1px solid #e5e7eb; scrollbar-width: thin; }
+    .lobby-tab { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.8rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500; text-decoration: none; white-space: nowrap; border: 1px solid #d1d5db; background: #fff; color: #374151; transition: background 0.15s, border-color 0.15s; }
+    .lobby-tab:hover { background: #f3f4f6; color: #111; text-decoration: none; }
+    .lobby-tab.active-page { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
+    .lobby-tab.your-turn { background: #059669; border-color: #047857; color: #fff; animation: lobby-pulse 1.4s ease-in-out infinite; }
+    .lobby-tab.your-turn:hover { background: #047857; color: #fff; }
+    @keyframes lobby-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.55); }
+      50%       { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); }
+    }
   </style>
 </head>
 <body>
@@ -45,6 +56,22 @@
       <a href="{{ url_for('auth.register') }}">Register</a>
     {% endif %}
   </nav>
+
+  {% if session.get('user_id') and lobby_ribbon %}
+  <div class="lobby-ribbon">
+    {% for item in lobby_ribbon %}
+      {% set is_active = request.path == '/lobbies/' ~ item.lobby.id %}
+      <a href="{{ url_for('lobby.detail', lobby_id=item.lobby.id) }}"
+         class="lobby-tab{% if item.is_my_turn %} your-turn{% elif is_active %} active-page{% endif %}">
+        {% if item.is_my_turn %}<span>&#9654;</span>{% endif %}
+        {{ item.lobby.name }}
+        {% if item.lobby.is_locked %}
+          <span style="opacity:0.75;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
 
   {% for msg in get_flashed_messages() %}
     <div class="flash">{{ msg }}</div>

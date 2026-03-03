@@ -44,6 +44,24 @@ def create_app(config_object='app.config.Config'):
     app.register_blueprint(lobby_bp, url_prefix='/lobbies')
     app.register_blueprint(savegame_bp, url_prefix='/savegames')
 
+    @app.context_processor
+    def inject_lobby_ribbon():
+        if 'user_id' not in session:
+            return {}
+        from .models import LobbyMember
+        memberships = LobbyMember.query.filter_by(user_id=session['user_id']).all()
+        ribbon = []
+        for m in memberships:
+            lob = m.lobby
+            is_my_turn = (
+                lob.is_locked
+                and lob.current_member is not None
+                and lob.current_member.user_id == session['user_id']
+            )
+            ribbon.append({'lobby': lob, 'is_my_turn': is_my_turn})
+        ribbon.sort(key=lambda x: x['lobby'].created_at)
+        return {'lobby_ribbon': ribbon}
+
     @app.route('/')
     def index():
         if 'user_id' in session:
