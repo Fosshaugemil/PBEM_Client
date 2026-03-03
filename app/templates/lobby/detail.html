@@ -48,6 +48,18 @@
   </div>
 </div>
 
+{% if lobby.is_locked %}
+  {% if lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
+    <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:600;color:#065f46">
+      &#9654; It's your turn! — Round {{ lobby.current_round }}
+    </div>
+  {% else %}
+    <div style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">
+      Round {{ lobby.current_round }} — Waiting for <strong>{{ lobby.current_member.user.username if lobby.current_member else '?' }}</strong>…
+    </div>
+  {% endif %}
+{% endif %}
+
 <div style="display:grid;grid-template-columns:1fr 2fr;gap:1rem">
 
   <!-- Members -->
@@ -57,14 +69,30 @@
       {% if lobby.is_locked %}<span style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle">locked</span>{% endif %}
     </h3>
     <ul style="list-style:none;padding:0;margin:0">
-      {% for m in lobby.members %}
-        <li style="padding:0.3rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem">
-          {{ m.user.username }}
-          {% if m.user_id == lobby.owner_id %}
-            <span class="badge badge-owner">owner</span>
-          {% endif %}
-        </li>
-      {% endfor %}
+      {% if lobby.is_locked %}
+        {% for m in lobby.ordered_members %}
+          {% set is_current = lobby.current_member and lobby.current_member.user_id == m.user_id %}
+          <li style="padding:0.3rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem{% if is_current %};font-weight:700;color:#065f46{% endif %}">
+            <span style="color:#9ca3af;font-size:0.8rem;min-width:1.2rem">{{ m.play_order + 1 }}.</span>
+            {{ m.user.username }}
+            {% if m.user_id == lobby.owner_id %}
+              <span class="badge badge-owner">owner</span>
+            {% endif %}
+            {% if is_current %}
+              <span style="background:#d1fae5;color:#065f46;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600">&#9654; turn</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      {% else %}
+        {% for m in lobby.members %}
+          <li style="padding:0.3rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem">
+            {{ m.user.username }}
+            {% if m.user_id == lobby.owner_id %}
+              <span class="badge badge-owner">owner</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      {% endif %}
     </ul>
   </div>
 
@@ -108,19 +136,22 @@
     <!-- Upload form -->
     <div class="card">
       <h3 style="margin-top:0">Upload Savegame</h3>
-      <form method="post" action="{{ url_for('savegame.upload', lobby_id=lobby.id) }}"
-            enctype="multipart/form-data" id="upload-form">
-        <label for="savegame">Savegame File *</label>
-        <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem">
+      {% if lobby.is_locked and lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
+        <form method="post" action="{{ url_for('savegame.upload', lobby_id=lobby.id) }}"
+              enctype="multipart/form-data" id="upload-form">
+          <label for="savegame">Savegame File *</label>
+          <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem">
 
-        <label for="round_number">Round Number</label>
-        <input type="number" id="round_number" name="round_number" value="1" min="1">
+          <label for="note">Note (optional)</label>
+          <input type="text" id="note" name="note" placeholder="e.g. took the northern route">
 
-        <label for="note">Note (optional)</label>
-        <input type="text" id="note" name="note" placeholder="e.g. End of round 3 — my turn done">
-
-        <button type="submit" class="btn btn-primary">Upload</button>
-      </form>
+          <button type="submit" class="btn btn-primary">Upload &amp; End Turn</button>
+        </form>
+      {% elif lobby.is_locked %}
+        <p style="color:#9ca3af;font-size:0.9rem;margin:0">Upload disabled — it is not your turn.</p>
+      {% else %}
+        <p style="color:#9ca3af;font-size:0.9rem;margin:0">Upload disabled — game has not started yet.</p>
+      {% endif %}
     </div>
   </div>
 
@@ -182,12 +213,15 @@
 </div>
 
 <script>
-document.getElementById('upload-form').addEventListener('submit', function(e) {
-    var file = document.getElementById('savegame').files[0];
-    if (file && file.size > 64 * 1024 * 1024) {
-        e.preventDefault();
-        alert('File exceeds the 64 MB limit.');
-    }
-});
+var uploadForm = document.getElementById('upload-form');
+if (uploadForm) {
+    uploadForm.addEventListener('submit', function(e) {
+        var file = document.getElementById('savegame').files[0];
+        if (file && file.size > 64 * 1024 * 1024) {
+            e.preventDefault();
+            alert('File exceeds the 64 MB limit.');
+        }
+    });
+}
 </script>
 {% endblock %}

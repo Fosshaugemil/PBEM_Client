@@ -22,6 +22,14 @@ def upload(lobby_id):
     lobby = Lobby.query.get_or_404(lobby_id)
     _assert_member(lobby_id, session['user_id'])
 
+    if not lobby.is_locked:
+        flash('Game has not started yet.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+    if lobby.current_member is None or lobby.current_member.user_id != session['user_id']:
+        flash('It is not your turn.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
     if 'savegame' not in request.files:
         flash('No file part in the request.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
@@ -40,13 +48,6 @@ def upload(lobby_id):
     upload_folder = current_app.config['UPLOAD_FOLDER']
     f.save(os.path.join(upload_folder, stored_name))
 
-    try:
-        round_number = int(request.form.get('round_number', 1))
-        if round_number < 1:
-            round_number = 1
-    except ValueError:
-        round_number = 1
-
     note = request.form.get('note', '').strip()[:512]
 
     sg = SavegameFile(
@@ -54,12 +55,21 @@ def upload(lobby_id):
         uploader_id=session['user_id'],
         original_name=f.filename[:256],
         stored_name=stored_name,
-        round_number=round_number,
+        round_number=lobby.current_round,
         note=note,
     )
     db.session.add(sg)
+
+    # Advance the turn
+    ordered = lobby.ordered_members
+    new_idx = (lobby.current_player_idx + 1) % len(ordered)
+    if new_idx == 0:
+        lobby.current_round += 1
+    lobby.current_player_idx = new_idx
+    next_player = ordered[new_idx].user.username
+
     db.session.commit()
-    flash('Savegame uploaded.')
+    flash(f'Savegame uploaded. Turn passed to {next_player}.')
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
 

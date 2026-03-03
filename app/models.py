@@ -19,6 +19,8 @@ class Lobby(db.Model):
     password_hash = db.Column(db.String(256), nullable=True)  # NULL = public
     max_players = db.Column(db.Integer, default=4)
     is_locked = db.Column(db.Boolean, default=False, nullable=False)
+    current_player_idx = db.Column(db.Integer, default=0, nullable=False)
+    current_round = db.Column(db.Integer, default=1, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -34,12 +36,27 @@ class Lobby(db.Model):
     def player_count(self):
         return len(self.members)
 
+    @property
+    def ordered_members(self):
+        return sorted(
+            [m for m in self.members if m.play_order is not None],
+            key=lambda m: m.play_order,
+        )
+
+    @property
+    def current_member(self):
+        ordered = self.ordered_members
+        if not ordered or not self.is_locked:
+            return None
+        return ordered[self.current_player_idx % len(ordered)]
+
 
 class LobbyMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    play_order = db.Column(db.Integer, nullable=True)  # NULL until game starts
 
     __table_args__ = (db.UniqueConstraint('lobby_id', 'user_id'),)
 
