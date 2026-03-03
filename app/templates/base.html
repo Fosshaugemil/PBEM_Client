@@ -8,6 +8,7 @@
     *, *::before, *::after { box-sizing: border-box; }
 
     /* ── Base ── */
+    html { font-size: 17px; }
     /* ── Background animation ── */
     @keyframes gridDrift {
       from { background-position: center center, 0 0; }
@@ -25,6 +26,7 @@
     body {
       font-family: 'Courier New', 'Consolas', monospace;
       max-width: 1600px; margin: 0 auto; padding: 1rem 2rem;
+      font-weight: bold;
       background-color: #0a0a0f;
       background-image:
         linear-gradient(rgba(168,85,247,0.18) 1px, transparent 1px),
@@ -137,7 +139,7 @@
 
     /* ── Forms ── */
     form.inline { display: inline; }
-    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; font-weight: 500; color: #a0a0b0; }
+    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; font-weight: bold; color: #a0a0b0; }
     input[type=text], input[type=password], input[type=number], textarea {
       width: 100%; padding: 0.4rem 0.6rem;
       border: 1px solid #2a2a3a; border-radius: 4px;
