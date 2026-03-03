@@ -32,6 +32,7 @@ def create_app(config_object='app.config.Config'):
     db.init_app(app)
 
     with app.app_context():
+        from . import models  # noqa: F401 — ensure models are registered before create_all
         db.create_all()
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
