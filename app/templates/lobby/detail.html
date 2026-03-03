@@ -10,6 +10,7 @@ var EDIT_URL   = "{{ url_for('lobby.edit',         lobby_id=lobby.id) }}";
 var UPLOAD_URL      = "{{ url_for('savegame.upload',    lobby_id=lobby.id) }}";
 var STATE_URL       = "{{ url_for('lobby.get_state',    lobby_id=lobby.id) }}";
 var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
+var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
 </script>
 
 <!-- Header -->
@@ -106,7 +107,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         Players ({{ lobby.player_count }}/<span id="lobby-max-display">{{ lobby.max_players }}</span>)
         {% if lobby.is_locked %}<span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle;border:1px solid rgba(240,228,0,0.4)">locked</span>{% endif %}
       </h3>
-      <ul style="list-style:none;padding:0;margin:0">
+      <ul id="player-list" style="list-style:none;padding:0;margin:0">
         {% if lobby.is_locked %}
           {% for m in lobby.ordered_members %}
             {% set is_current = lobby.current_member and lobby.current_member.user_id == m.user_id %}
@@ -118,8 +119,15 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
             </li>
           {% endfor %}
         {% else %}
-          {% for m in lobby.members %}
-            <li data-user-id="{{ m.user_id }}" style="padding:0.35rem 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:0.5rem">
+          {% set pre_ordered = lobby.members|sort(attribute='joined_at') %}
+          {% for m in pre_ordered %}
+            <li data-user-id="{{ m.user_id }}" style="padding:0.35rem 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:0.4rem">
+              {% if lobby.owner_id == session['user_id'] %}
+                <span style="display:flex;flex-direction:column;line-height:1;flex-shrink:0">
+                  <button class="ord-up" style="background:none;border:none;color:#4b5563;cursor:pointer;padding:0.05rem 0.25rem;font-size:0.65rem;line-height:1" title="Move up">▲</button>
+                  <button class="ord-dn" style="background:none;border:none;color:#4b5563;cursor:pointer;padding:0.05rem 0.25rem;font-size:0.65rem;line-height:1" title="Move down">▼</button>
+                </span>
+              {% endif %}
               {{ m.user.username }}
               {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
             </li>
@@ -136,10 +144,50 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
       </h3>
       <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}">
         <input type="hidden" name="round_number" value="">
-        <textarea name="content" rows="4" placeholder="Strategy, reminders…"
+        <textarea name="content" rows="3" placeholder="Strategy, reminders…"
                   style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.85rem">{{ general_note.content if general_note else '' }}</textarea>
         <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.3rem 0.7rem">Save</button>
       </form>
+    </div>
+
+  </div>
+
+  <!-- CENTER: Savegames + Upload -->
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;color:#e0e0e0">Savegames</h3>
+      <div id="savegames-container">
+      {% if savegames %}
+        {% set sg = savegames[0] %}
+        <table>
+          <thead>
+            <tr>
+              <th>Round</th>
+              <th>File</th>
+              <th>Player</th>
+              <th>Note</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="savegames-tbody">
+            <tr data-sg-id="{{ sg.id }}">
+              <td style="color:#a855f7">{{ sg.round_number }}</td>
+              <td style="font-size:0.85rem;word-break:break-all">{{ sg.original_name }}</td>
+              <td style="font-size:0.9rem">{{ sg.uploader.username }}</td>
+              <td style="color:#6b7280;font-size:0.85rem">{{ sg.note or '—' }}</td>
+              <td style="font-size:0.8rem;white-space:nowrap;color:#4b5563">{{ sg.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>
+                <a href="{{ url_for('savegame.download', file_id=sg.id) }}" class="btn btn-secondary"
+                   style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      {% else %}
+        <p id="savegames-empty" style="color:#4b5563;font-size:0.9rem;margin:0">No savegames yet.</p>
+      {% endif %}
+      </div><!-- /savegames-container -->
     </div>
 
     <!-- Round Notes -->
@@ -148,7 +196,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         Round Notes
         <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
       </h3>
-      <div style="max-height:320px;overflow-y:auto;margin-bottom:0.75rem">
+      <div style="max-height:160px;overflow-y:auto;margin-bottom:0.75rem">
         <table id="round-notes-table" style="font-size:0.85rem;width:100%"{% if not round_notes %} hidden{% endif %}>
           <thead><tr><th>Rnd</th><th>Note</th><th style="width:1.8rem"></th></tr></thead>
           <tbody id="round-notes-tbody">
@@ -180,47 +228,6 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         </div>
         <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.6rem;white-space:nowrap">Save</button>
       </form>
-    </div>
-
-  </div>
-
-  <!-- CENTER: Savegames + Upload -->
-  <div>
-    <div class="card">
-      <h3 style="margin-top:0;color:#e0e0e0">Savegames</h3>
-      <div id="savegames-container">
-      {% if savegames %}
-        <table>
-          <thead>
-            <tr>
-              <th>Round</th>
-              <th>File</th>
-              <th>Player</th>
-              <th>Note</th>
-              <th>Date</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="savegames-tbody">
-            {% for sg in savegames %}
-            <tr data-sg-id="{{ sg.id }}">
-              <td style="color:#a855f7">{{ sg.round_number }}</td>
-              <td style="font-size:0.85rem;word-break:break-all">{{ sg.original_name }}</td>
-              <td style="font-size:0.9rem">{{ sg.uploader.username }}</td>
-              <td style="color:#6b7280;font-size:0.85rem">{{ sg.note or '—' }}</td>
-              <td style="font-size:0.8rem;white-space:nowrap;color:#4b5563">{{ sg.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
-              <td>
-                <a href="{{ url_for('savegame.download', file_id=sg.id) }}" class="btn btn-secondary"
-                   style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p id="savegames-empty" style="color:#4b5563;font-size:0.9rem;margin:0">No savegames yet.</p>
-      {% endif %}
-      </div><!-- /savegames-container -->
     </div>
 
     <div class="card" id="upload-card">
@@ -255,7 +262,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
     <!-- Message list -->
     <div id="chat-log"
          data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
-         style="height:420px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+         style="max-height:300px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
       {% if chat_messages %}
         {% for msg in chat_messages %}
           <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
@@ -379,10 +386,9 @@ function buildMsg(m) {
   return d;
 }
 function appendMsg(m) {
-  var near=log.scrollHeight-log.scrollTop-log.clientHeight<50;
   var emp=document.getElementById('chat-empty'); if(emp) emp.remove();
   log.appendChild(buildMsg(m));
-  if(near) log.scrollTop=log.scrollHeight;
+  log.scrollTop = log.scrollHeight;
   if (m.user_id !== SESSION_UID) playNotifSound();
 }
 
@@ -462,11 +468,11 @@ function pollState() {
         wasMyTurn = nowMyTurn;
       }
 
-      // Inject new savegame rows
-      (data.savegames || []).forEach(function(sg){
-        if (knownSgIds.has(sg.id)) return;
-        knownSgIds.add(sg.id);
-        // Lazily create the table if no savegames existed at page load
+      // Inject new savegame rows — only keep the latest one visible
+      var newSgs = (data.savegames || []).filter(function(sg){ return !knownSgIds.has(sg.id); });
+      newSgs.forEach(function(sg){ knownSgIds.add(sg.id); });
+      if (newSgs.length > 0) {
+        var latestSg = newSgs[0]; // data.savegames is DESC ordered, newest first
         var tbody = document.getElementById('savegames-tbody');
         if (!tbody) {
           var container = document.getElementById('savegames-container');
@@ -479,9 +485,11 @@ function pollState() {
           if (container) container.appendChild(tbl);
           tbody = document.getElementById('savegames-tbody');
         }
-        if (!tbody) return;
-        tbody.insertBefore(buildSgRow(sg), tbody.firstChild);
-      });
+        if (tbody) {
+          while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+          tbody.appendChild(buildSgRow(latestSg));
+        }
+      }
     })
     .catch(function(){})
     .finally(function(){ stateInFlight = false; });
@@ -612,18 +620,43 @@ if(uploadForm){
         li.style.color=cur?'#00ff41':'';
       });
 
-      // 4. Prepend new savegame row
+      // 4. Replace savegame display with only the new row
       var tbody=document.getElementById('savegames-tbody');
       var sg=data.savegame;
       if(tbody&&sg){
         var emp=document.getElementById('savegames-empty'); if(emp) emp.remove();
-        var tr=buildSgRow(sg);
         knownSgIds.add(sg.id);
-        tbody.insertBefore(tr,tbody.firstChild);
+        while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+        tbody.appendChild(buildSgRow(sg));
       }
 
       uploadForm.reset();
     });
+  });
+}
+
+// ── Player reordering ──────────────────────────────────────────────────────
+var playerUl = document.getElementById('player-list');
+if (playerUl) {
+  playerUl.addEventListener('click', function(e) {
+    var isUp = e.target.classList.contains('ord-up');
+    var isDn = e.target.classList.contains('ord-dn');
+    if (!isUp && !isDn) return;
+    var li = e.target.closest('li');
+    if (!li) return;
+    var sibling = isUp ? li.previousElementSibling : li.nextElementSibling;
+    if (!sibling) return;
+    if (isUp) playerUl.insertBefore(li, sibling);
+    else playerUl.insertBefore(sibling, li);
+    var order = Array.from(playerUl.querySelectorAll('li[data-user-id]')).map(function(l) {
+      return parseInt(l.dataset.userId);
+    });
+    fetch(REORDER_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+      body: JSON.stringify({order: order}),
+      credentials: 'same-origin'
+    }).catch(function(){});
   });
 }
 </script>
