@@ -14,8 +14,12 @@
       to   { background-position: center center, 60px 60px; }
     }
     @keyframes scanFlicker {
-      0%, 100% { opacity: 0.025; }
-      50%       { opacity: 0.055; }
+      0%, 100% { opacity: 0.04; }
+      50%       { opacity: 0.09; }
+    }
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.55; }
+      50%       { opacity: 0.85; }
     }
 
     body {
@@ -23,13 +27,28 @@
       max-width: 1600px; margin: 0 auto; padding: 1rem 2rem;
       background-color: #0a0a0f;
       background-image:
-        linear-gradient(rgba(168,85,247,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(168,85,247,0.04) 1px, transparent 1px);
+        linear-gradient(rgba(168,85,247,0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(168,85,247,0.18) 1px, transparent 1px);
       background-size: 60px 60px;
       color: #e0e0e0;
       position: relative;
       zoom: 0.75;
-      animation: gridDrift 18s linear infinite;
+      animation: gridDrift 12s linear infinite;
+    }
+    /* Ambient glow — centered radial pulse */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(
+        ellipse 70% 55% at 50% 45%,
+        rgba(168,85,247,0.09) 0%,
+        rgba(168,85,247,0.04) 40%,
+        transparent 70%
+      );
+      pointer-events: none;
+      z-index: 9998;
+      animation: glowPulse 4s ease-in-out infinite;
     }
     /* Scanline overlay */
     body::after {
@@ -40,8 +59,8 @@
         0deg,
         transparent,
         transparent 2px,
-        rgba(0,0,0,0.04) 2px,
-        rgba(0,0,0,0.04) 4px
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
       );
       pointer-events: none;
       z-index: 9999;

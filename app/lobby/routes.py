@@ -283,6 +283,33 @@ def get_messages(lobby_id):
     } for m in query.limit(50).all()]})
 
 
+@lobby_bp.route('/<int:lobby_id>/state')
+@login_required
+def get_state(lobby_id):
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    lobby = Lobby.query.get_or_404(lobby_id)
+    cur = lobby.current_member
+    savegames = (SavegameFile.query
+                 .filter_by(lobby_id=lobby_id)
+                 .order_by(SavegameFile.uploaded_at.desc())
+                 .all())
+    return jsonify({
+        'current_round': lobby.current_round,
+        'current_player_user_id': cur.user_id if cur else None,
+        'current_player_username': cur.user.username if cur else None,
+        'savegames': [{
+            'id': sg.id,
+            'round_number': sg.round_number,
+            'original_name': sg.original_name,
+            'uploader_username': sg.uploader.username,
+            'note': sg.note or '',
+            'uploaded_at': sg.uploaded_at.isoformat() + 'Z',
+            'download_url': url_for('savegame.download', file_id=sg.id),
+        } for sg in savegames],
+    })
+
+
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
 @login_required
 def delete(lobby_id):
