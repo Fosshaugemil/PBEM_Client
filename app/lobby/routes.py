@@ -82,10 +82,12 @@ def detail(lobby_id):
                            PlayerNote.round_number.isnot(None))
                    .order_by(PlayerNote.round_number.desc())
                    .all())
-    chat_messages = (ChatMessage.query
-                     .filter_by(lobby_id=lobby_id)
-                     .order_by(ChatMessage.created_at.asc())
-                     .limit(100).all())
+    chat_messages = list(reversed(
+        ChatMessage.query
+        .filter_by(lobby_id=lobby_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(100).all()
+    ))
     return render_template('lobby/detail.html', lobby=lobby, savegames=savegames,
                            general_note=general_note, round_notes=round_notes,
                            chat_messages=chat_messages)
