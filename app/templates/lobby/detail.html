@@ -42,7 +42,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         {% if lobby.is_locked %}
           <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
         {% else %}
-          <button type="submit" class="btn btn-primary"
+          <button type="submit" class="btn btn-primary" id="start-game-btn"
                   {% if lobby.player_count < lobby.max_players %}
                     disabled title="Lobby must be full to lock ({{ lobby.player_count }}/{{ lobby.max_players }})"
                   {% endif %}>Start Game</button>
@@ -559,6 +559,14 @@ if(editForm){
       showFeedback(btn,'Updated \u2713',false);
       var span=document.getElementById('lobby-max-display');
       if(span) span.textContent=data.max_players;
+      // Update Start Game button enabled/disabled state without a page reload
+      var startBtn=document.getElementById('start-game-btn');
+      if(startBtn){
+        var playerCount=document.querySelectorAll('li[data-user-id]').length;
+        var canStart=playerCount>=data.max_players;
+        startBtn.disabled=!canStart;
+        startBtn.title=canStart?'':'Lobby must be full to lock ('+playerCount+'/'+data.max_players+')';
+      }
     });
   });
 }
