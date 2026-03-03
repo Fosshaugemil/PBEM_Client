@@ -13,6 +13,11 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
 var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
 </script>
 
+<style>
+#chat-log { scrollbar-width: none; -ms-overflow-style: none; }
+#chat-log::-webkit-scrollbar { display: none; }
+</style>
+
 <!-- Header -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
   <div>
@@ -334,8 +339,7 @@ if (muteBtn) {
   });
 }
 var _audioCtx = null;
-function playNotifSound() {
-  if (chatMuted) return;
+function _doPlayNotif() {
   try {
     if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     var ctx = _audioCtx;
@@ -349,6 +353,17 @@ function playNotifSound() {
       osc.start(ctx.currentTime + s[1]);
       osc.stop(ctx.currentTime + s[2]);
     });
+  } catch(e) {}
+}
+function playNotifSound() {
+  if (chatMuted) return;
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') {
+      _audioCtx.resume().then(_doPlayNotif).catch(function(){});
+    } else {
+      _doPlayNotif();
+    }
   } catch(e) {}
 }
 
@@ -414,7 +429,7 @@ if (chatForm) {
 // Polling
 var pollInFlight=false;
 function poll(){
-  if(pollInFlight||!log||document.visibilityState==='hidden') return;
+  if(pollInFlight||!log) return;
   pollInFlight=true;
   fetch(MSG_URL+(latestTs?'?after='+encodeURIComponent(latestTs):''),
     {headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
@@ -428,8 +443,7 @@ function poll(){
 }
 var pollTimer=setInterval(function(){ poll(); pollState(); },4000);
 document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState==='hidden'){ clearInterval(pollTimer); pollTimer=null; }
-  else { poll(); pollState(); pollTimer=setInterval(function(){ poll(); pollState(); },4000); }
+  if(document.visibilityState!=='hidden'){ poll(); pollState(); }
 });
 
 // ── Savegame / turn-state polling ───────────────────────────────────────────
