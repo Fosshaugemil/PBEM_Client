@@ -324,7 +324,7 @@ var seenIds   = {};
 
 if (log) {
   log.querySelectorAll('[data-msg-id]').forEach(function(el){ seenIds[el.dataset.msgId]=true; });
-  log.scrollTop = log.scrollHeight;
+  requestAnimationFrame(function(){ log.scrollTop = log.scrollHeight; });
 }
 
 // ── Chat sound ──────────────────────────────────────────────────────────────
