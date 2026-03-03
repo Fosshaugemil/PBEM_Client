@@ -254,7 +254,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
     <!-- Message list -->
     <div id="chat-log"
          data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
-         style="border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+         style="overflow:hidden;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
       {% if chat_messages %}
         {% for msg in chat_messages %}
           <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
