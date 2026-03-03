@@ -148,7 +148,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         Round Notes
         <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
       </h3>
-      <div style="margin-bottom:0.75rem">
+      <div style="max-height:320px;overflow:hidden;margin-bottom:0.75rem">
         <table id="round-notes-table" style="font-size:0.85rem;width:100%"{% if not round_notes %} hidden{% endif %}>
           <thead><tr><th>Rnd</th><th>Note</th><th style="width:1.8rem"></th></tr></thead>
           <tbody id="round-notes-tbody">
