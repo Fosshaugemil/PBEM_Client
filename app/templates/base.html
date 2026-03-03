@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}PBEM Server{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: sans-serif; max-width: 960px; margin: 0 auto; padding: 1rem; background: #f5f5f5; color: #222; }
+    nav { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #ccc; margin-bottom: 1.5rem; }
+    nav .brand { font-weight: bold; font-size: 1.2rem; margin-right: auto; }
+    a { color: #2563eb; }
+    a:hover { text-decoration: none; }
+    .btn { display: inline-block; padding: 0.4rem 0.9rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; text-decoration: none; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; color: #fff; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; color: #fff; }
+    .btn-secondary { background: #6b7280; color: #fff; }
+    .btn-secondary:hover { background: #4b5563; color: #fff; }
+    .flash { padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 1rem; background: #fef3c7; border: 1px solid #f59e0b; }
+    .card { background: #fff; border: 1px solid #d1d5db; border-radius: 6px; padding: 1.5rem; margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; }
+    th { background: #f9fafb; font-size: 0.85rem; text-transform: uppercase; color: #6b7280; }
+    form.inline { display: inline; }
+    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; font-weight: 500; }
+    input[type=text], input[type=password], input[type=number], textarea { width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.95rem; margin-bottom: 0.75rem; }
+    .lock { font-size: 0.8rem; color: #9ca3af; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-owner { background: #dbeafe; color: #1e40af; }
+  </style>
+</head>
+<body>
+  <nav>
+    <span class="brand">PBEM Server</span>
+    {% if session.get('user_id') %}
+      <a href="{{ url_for('lobby.list_lobbies') }}">Lobbies</a>
+      <span style="color:#6b7280">{{ session.get('username') }}</span>
+      <form action="{{ url_for('auth.logout') }}" method="post" class="inline">
+        <button class="btn btn-secondary" type="submit">Logout</button>
+      </form>
+    {% else %}
+      <a href="{{ url_for('auth.login') }}">Login</a>
+      <a href="{{ url_for('auth.register') }}">Register</a>
+    {% endif %}
+  </nav>
+
+  {% for msg in get_flashed_messages() %}
+    <div class="flash">{{ msg }}</div>
+  {% endfor %}
+
+  {% block content %}{% endblock %}
+</body>
+</html>

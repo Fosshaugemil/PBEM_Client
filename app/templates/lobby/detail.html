@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ lobby.name }} — PBEM Server{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+  <div>
+    <h2 style="margin:0 0 0.25rem">
+      {{ lobby.name }}
+      {% if lobby.is_password_protected %}<span class="lock" title="Password protected">🔒</span>{% endif %}
+    </h2>
+    {% if lobby.description %}<p style="color:#6b7280;margin:0">{{ lobby.description }}</p>{% endif %}
+  </div>
+  <div style="display:flex;gap:0.5rem">
+    {% if lobby.owner_id == session['user_id'] %}
+      <form method="post" action="{{ url_for('lobby.delete', lobby_id=lobby.id) }}" class="inline"
+            onsubmit="return confirm('Delete this lobby and all its savegames?')">
+        <button type="submit" class="btn btn-danger">Delete Lobby</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('lobby.leave', lobby_id=lobby.id) }}" class="inline"
+            onsubmit="return confirm('Leave this lobby?')">
+        <button type="submit" class="btn btn-secondary">Leave</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 2fr;gap:1rem">
+
+  <!-- Members -->
+  <div class="card">
+    <h3 style="margin-top:0">Players ({{ lobby.player_count }}/{{ lobby.max_players }})</h3>
+    <ul style="list-style:none;padding:0;margin:0">
+      {% for m in lobby.members %}
+        <li style="padding:0.3rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem">
+          {{ m.user.username }}
+          {% if m.user_id == lobby.owner_id %}
+            <span class="badge badge-owner">owner</span>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Savegames -->
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0">Savegames</h3>
+      {% if savegames %}
+        <table>
+          <thead>
+            <tr>
+              <th>Round</th>
+              <th>File</th>
+              <th>Uploaded by</th>
+              <th>Note</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sg in savegames %}
+            <tr>
+              <td>{{ sg.round_number }}</td>
+              <td style="font-size:0.85rem;word-break:break-all">{{ sg.original_name }}</td>
+              <td style="font-size:0.9rem">{{ sg.uploader.username }}</td>
+              <td style="color:#6b7280;font-size:0.85rem">{{ sg.note or '—' }}</td>
+              <td style="font-size:0.8rem;white-space:nowrap">{{ sg.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>
+                <a href="{{ url_for('savegame.download', file_id=sg.id) }}" class="btn btn-secondary"
+                   style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p style="color:#9ca3af;font-size:0.9rem;margin:0">No savegames uploaded yet.</p>
+      {% endif %}
+    </div>
+
+    <!-- Upload form -->
+    <div class="card">
+      <h3 style="margin-top:0">Upload Savegame</h3>
+      <form method="post" action="{{ url_for('savegame.upload', lobby_id=lobby.id) }}"
+            enctype="multipart/form-data" id="upload-form">
+        <label for="savegame">Savegame File *</label>
+        <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem">
+
+        <label for="round_number">Round Number</label>
+        <input type="number" id="round_number" name="round_number" value="1" min="1">
+
+        <label for="note">Note (optional)</label>
+        <input type="text" id="note" name="note" placeholder="e.g. End of round 3 — my turn done">
+
+        <button type="submit" class="btn btn-primary">Upload</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.getElementById('upload-form').addEventListener('submit', function(e) {
+    var file = document.getElementById('savegame').files[0];
+    if (file && file.size > 64 * 1024 * 1024) {
+        e.preventDefault();
+        alert('File exceeds the 64 MB limit.');
+    }
+});
+</script>
+{% endblock %}
