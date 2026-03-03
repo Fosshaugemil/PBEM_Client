@@ -8,6 +8,16 @@
     *, *::before, *::after { box-sizing: border-box; }
 
     /* ── Base ── */
+    /* ── Background animation ── */
+    @keyframes gridDrift {
+      from { background-position: center center, 0 0; }
+      to   { background-position: center center, 60px 60px; }
+    }
+    @keyframes scanFlicker {
+      0%, 100% { opacity: 0.025; }
+      50%       { opacity: 0.055; }
+    }
+
     body {
       font-family: 'Courier New', 'Consolas', monospace;
       max-width: 1600px; margin: 0 auto; padding: 1rem 2rem;
@@ -18,6 +28,8 @@
       background-size: 60px 60px;
       color: #e0e0e0;
       position: relative;
+      zoom: 0.75;
+      animation: gridDrift 18s linear infinite;
     }
     /* Scanline overlay */
     body::after {
@@ -33,6 +45,7 @@
       );
       pointer-events: none;
       z-index: 9999;
+      animation: scanFlicker 5s ease-in-out infinite;
     }
 
     /* ── Nav ── */
@@ -226,15 +239,26 @@
       try { localStorage.setItem('pbem_ribbon_cat', cat); } catch(e) {}
     }
 
-    var hasOngoing = false;
-    tabs.forEach(function(t) { if (t.dataset.status === 'ongoing') hasOngoing = true; });
+    // Count tabs per category and disable empty buttons
+    var counts = {not_started: 0, ongoing: 0, archived: 0};
+    tabs.forEach(function(t) { if (counts[t.dataset.status] !== undefined) counts[t.dataset.status]++; });
+    btns.forEach(function(b) {
+      var cat = b.dataset.cat;
+      if (counts[cat] === 0) {
+        b.disabled = true;
+        b.style.opacity = '0.35';
+        b.style.cursor = 'not-allowed';
+        b.title = 'No lobbies in this category';
+      }
+      b.addEventListener('click', function() { if (!this.disabled) showCat(this.dataset.cat); });
+    });
+
     var saved = '';
     try { saved = localStorage.getItem('pbem_ribbon_cat') || ''; } catch(e) {}
-    var defaultCat = saved || (hasOngoing ? 'ongoing' : 'not_started');
-
-    btns.forEach(function(b) {
-      b.addEventListener('click', function() { showCat(this.dataset.cat); });
-    });
+    if (saved && counts[saved] === 0) saved = '';
+    var defaultCat = saved ||
+      (counts.ongoing     > 0 ? 'ongoing'     :
+       counts.not_started > 0 ? 'not_started' : 'archived');
 
     showCat(defaultCat);
   })();

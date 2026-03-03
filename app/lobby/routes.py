@@ -81,7 +81,7 @@ def detail(lobby_id):
                            PlayerNote.lobby_id == lobby_id,
                            PlayerNote.round_number.isnot(None))
                    .order_by(PlayerNote.round_number.desc())
-                   .limit(5).all())
+                   .all())
     chat_messages = (ChatMessage.query
                      .filter_by(lobby_id=lobby_id)
                      .order_by(ChatMessage.created_at.asc())

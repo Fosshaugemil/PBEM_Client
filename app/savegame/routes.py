@@ -1,7 +1,7 @@
 import os
 import uuid
 
-from flask import Blueprint, request, redirect, url_for, session, flash, abort, current_app
+from flask import Blueprint, request, redirect, url_for, session, flash, abort, current_app, jsonify
 from flask import send_from_directory
 from werkzeug.utils import secure_filename
 
@@ -19,28 +19,39 @@ def _assert_member(lobby_id, user_id):
 @savegame_bp.route('/upload/<int:lobby_id>', methods=['POST'])
 @login_required
 def upload(lobby_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     lobby = Lobby.query.get_or_404(lobby_id)
     _assert_member(lobby_id, session['user_id'])
 
     if not lobby.is_locked:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Game has not started yet.'}), 400
         flash('Game has not started yet.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
     if lobby.current_member is None or lobby.current_member.user_id != session['user_id']:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'It is not your turn.'}), 403
         flash('It is not your turn.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
     if 'savegame' not in request.files:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'No file part in the request.'}), 400
         flash('No file part in the request.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
     f = request.files['savegame']
     if not f.filename:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'No file selected.'}), 400
         flash('No file selected.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
     safe_name = secure_filename(f.filename)
     if not safe_name:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Invalid filename.'}), 400
         flash('Invalid filename.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
@@ -82,6 +93,29 @@ def upload(lobby_id):
             db.session.delete(old)
 
     db.session.commit()
+
+    if is_ajax:
+        new_member = lobby.current_member
+        from ..models import User
+        uploader = User.query.get(session['user_id'])
+        return jsonify({
+            'ok': True,
+            'message': f'Savegame uploaded. Turn passed to {next_player}.',
+            'current_round': lobby.current_round,
+            'current_player_username': new_member.user.username if new_member else None,
+            'current_player_user_id': new_member.user_id if new_member else None,
+            'is_my_turn_now': new_member is not None and new_member.user_id == session['user_id'],
+            'savegame': {
+                'id': sg.id,
+                'original_name': sg.original_name,
+                'note': sg.note or '',
+                'uploader_username': uploader.username if uploader else '?',
+                'uploaded_at': sg.uploaded_at.isoformat() + 'Z',
+                'round_number': sg.round_number,
+                'download_url': url_for('savegame.download', file_id=sg.id),
+            },
+        })
+
     flash(f'Savegame uploaded. Turn passed to {next_player}.')
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
