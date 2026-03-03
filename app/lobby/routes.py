@@ -192,8 +192,12 @@ def lock(lobby_id):
             flash(f'Lobby must be full before locking ({lobby.player_count}/{lobby.max_players} players).')
             return redirect(url_for('lobby.detail', lobby_id=lobby_id))
         lobby.is_locked = True
-        for i, m in enumerate(sorted(lobby.members, key=lambda m: m.joined_at)):
-            m.play_order = i
+        members_with_order = [m for m in lobby.members if m.play_order is not None]
+        if len(members_with_order) == len(lobby.members):
+            pass  # owner pre-set the order via /reorder — keep it
+        else:
+            for i, m in enumerate(sorted(lobby.members, key=lambda m: m.joined_at)):
+                m.play_order = i
         lobby.current_player_idx = 0
         lobby.current_round = 1
         db.session.commit()
@@ -334,6 +338,25 @@ def get_state(lobby_id):
             'download_url': url_for('savegame.download', file_id=sg.id),
         } for sg in savegames],
     })
+
+
+@lobby_bp.route('/<int:lobby_id>/reorder', methods=['POST'])
+@login_required
+def reorder(lobby_id):
+    lobby = Lobby.query.get_or_404(lobby_id)
+    if lobby.owner_id != session['user_id']:
+        abort(403)
+    if lobby.is_locked:
+        return jsonify({'ok': False, 'error': 'Lobby is locked.'}), 400
+    data = request.get_json(force=True, silent=True) or {}
+    user_ids = data.get('order', [])
+    member_map = {m.user_id: m for m in lobby.members}
+    if set(user_ids) != set(member_map.keys()) or len(user_ids) != len(member_map):
+        return jsonify({'ok': False, 'error': 'Invalid player list.'}), 400
+    for i, uid in enumerate(user_ids):
+        member_map[uid].play_order = i
+    db.session.commit()
+    return jsonify({'ok': True})
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])

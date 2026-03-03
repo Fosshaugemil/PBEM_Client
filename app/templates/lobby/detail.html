@@ -10,6 +10,7 @@ var EDIT_URL   = "{{ url_for('lobby.edit',         lobby_id=lobby.id) }}";
 var UPLOAD_URL      = "{{ url_for('savegame.upload',    lobby_id=lobby.id) }}";
 var STATE_URL       = "{{ url_for('lobby.get_state',    lobby_id=lobby.id) }}";
 var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
+var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
 </script>
 
 <!-- Header -->
@@ -106,7 +107,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         Players ({{ lobby.player_count }}/<span id="lobby-max-display">{{ lobby.max_players }}</span>)
         {% if lobby.is_locked %}<span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle;border:1px solid rgba(240,228,0,0.4)">locked</span>{% endif %}
       </h3>
-      <ul style="list-style:none;padding:0;margin:0">
+      <ul id="player-list" style="list-style:none;padding:0;margin:0">
         {% if lobby.is_locked %}
           {% for m in lobby.ordered_members %}
             {% set is_current = lobby.current_member and lobby.current_member.user_id == m.user_id %}
@@ -118,8 +119,15 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
             </li>
           {% endfor %}
         {% else %}
-          {% for m in lobby.members %}
-            <li data-user-id="{{ m.user_id }}" style="padding:0.35rem 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:0.5rem">
+          {% set pre_ordered = lobby.members|sort(attribute='joined_at') %}
+          {% for m in pre_ordered %}
+            <li data-user-id="{{ m.user_id }}" style="padding:0.35rem 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:0.4rem">
+              {% if lobby.owner_id == session['user_id'] %}
+                <span style="display:flex;flex-direction:column;line-height:1;flex-shrink:0">
+                  <button class="ord-up" style="background:none;border:none;color:#4b5563;cursor:pointer;padding:0.05rem 0.25rem;font-size:0.65rem;line-height:1" title="Move up">▲</button>
+                  <button class="ord-dn" style="background:none;border:none;color:#4b5563;cursor:pointer;padding:0.05rem 0.25rem;font-size:0.65rem;line-height:1" title="Move down">▼</button>
+                </span>
+              {% endif %}
               {{ m.user.username }}
               {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
             </li>
@@ -622,6 +630,31 @@ if(uploadForm){
 
       uploadForm.reset();
     });
+  });
+}
+
+// ── Player reordering ──────────────────────────────────────────────────────
+var playerUl = document.getElementById('player-list');
+if (playerUl) {
+  playerUl.addEventListener('click', function(e) {
+    var isUp = e.target.classList.contains('ord-up');
+    var isDn = e.target.classList.contains('ord-dn');
+    if (!isUp && !isDn) return;
+    var li = e.target.closest('li');
+    if (!li) return;
+    var sibling = isUp ? li.previousElementSibling : li.nextElementSibling;
+    if (!sibling) return;
+    if (isUp) playerUl.insertBefore(li, sibling);
+    else playerUl.insertBefore(sibling, li);
+    var order = Array.from(playerUl.querySelectorAll('li[data-user-id]')).map(function(l) {
+      return parseInt(l.dataset.userId);
+    });
+    fetch(REORDER_URL, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+      body: JSON.stringify({order: order}),
+      credentials: 'same-origin'
+    }).catch(function(){});
   });
 }
 </script>
