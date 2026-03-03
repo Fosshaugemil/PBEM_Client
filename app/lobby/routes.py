@@ -242,6 +242,32 @@ def save_note(lobby_id):
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
 
+@lobby_bp.route('/<int:lobby_id>/note/delete', methods=['POST'])
+@login_required
+def delete_note(lobby_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    try:
+        round_number = int(request.form.get('round_number', ''))
+        if round_number < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Invalid round number.'}), 400
+        flash('Invalid round number.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    note = PlayerNote.query.filter_by(
+        user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number).first()
+    if note:
+        db.session.delete(note)
+        db.session.commit()
+    if is_ajax:
+        return jsonify({'ok': True, 'round_number': round_number})
+    flash('Round note deleted.')
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+
 @lobby_bp.route('/<int:lobby_id>/chat', methods=['POST'])
 @login_required
 def post_chat(lobby_id):

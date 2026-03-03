@@ -32,7 +32,6 @@
       background-size: 60px 60px;
       color: #e0e0e0;
       position: relative;
-      zoom: 0.75;
       animation: gridDrift 12s linear infinite;
     }
     /* Ambient glow — centered radial pulse */
@@ -289,5 +288,15 @@
   {% endfor %}
 
   {% block content %}{% endblock %}
+  <script>
+  (function(){
+    function applyZoom(){
+      var z = Math.min(1, window.innerWidth / 1600);
+      document.body.style.zoom = z;
+    }
+    applyZoom();
+    window.addEventListener('resize', applyZoom);
+  })();
+  </script>
 </body>
 </html>
