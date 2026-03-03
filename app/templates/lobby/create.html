@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Create Lobby — PBEM Server{% endblock %}
+{% block content %}
+<div class="card" style="max-width:520px">
+  <h2 style="margin-top:0">Create New Lobby</h2>
+  <form method="post">
+    <label for="name">Lobby Name *</label>
+    <input type="text" id="name" name="name" required autofocus>
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="2" style="resize:vertical"></textarea>
+
+    <label for="max_players">Max Players</label>
+    <input type="number" id="max_players" name="max_players" value="4" min="2" max="32">
+
+    <label for="password">Password (leave blank for public)</label>
+    <input type="password" id="password" name="password" autocomplete="new-password">
+
+    <div style="display:flex;gap:0.75rem;margin-top:0.5rem">
+      <button type="submit" class="btn btn-primary">Create</button>
+      <a href="{{ url_for('lobby.list_lobbies') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

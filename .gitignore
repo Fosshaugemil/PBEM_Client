@@ -1,6 +1,8 @@
-*.db
-savegames/
+uploads/*
+!uploads/.gitkeep
+instance/
 __pycache__/
 *.pyc
-.pbem_client.json
-*.sav
+*.pyo
+.env
+*.db

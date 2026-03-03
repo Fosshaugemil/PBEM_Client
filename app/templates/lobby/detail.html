@@ -1,0 +1,473 @@
+{% extends "base.html" %}
+{% block title %}{{ lobby.name }} — PBEM Server{% endblock %}
+{% block content %}
+<script>
+var SESSION_UID = {{ session['user_id'] }};
+var MSG_URL  = "{{ url_for('lobby.get_messages', lobby_id=lobby.id) }}";
+var CHAT_URL = "{{ url_for('lobby.post_chat',    lobby_id=lobby.id) }}";
+var NOTE_URL = "{{ url_for('lobby.save_note',    lobby_id=lobby.id) }}";
+var EDIT_URL   = "{{ url_for('lobby.edit',         lobby_id=lobby.id) }}";
+var UPLOAD_URL = "{{ url_for('savegame.upload',   lobby_id=lobby.id) }}";
+</script>
+
+<!-- Header -->
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
+  <div>
+    <h2 style="margin:0 0 0.25rem">
+      {{ lobby.name }}
+      {% if lobby.is_password_protected %}<span class="lock" title="Password protected">&#128274;</span>{% endif %}
+      {% if lobby.is_archived %}
+        <span style="background:rgba(107,114,128,0.2);color:#9ca3af;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid #4b5563;margin-left:0.4rem">Archived</span>
+      {% elif lobby.is_locked %}
+        <span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(240,228,0,0.5);margin-left:0.4rem">&#128274; In Progress</span>
+      {% endif %}
+    </h2>
+    {% if lobby.description %}<p style="color:#6b7280;margin:0">{{ lobby.description }}</p>{% endif %}
+  </div>
+  <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+    {% if lobby.owner_id == session['user_id'] %}
+      <form method="post" action="{{ url_for('lobby.edit', lobby_id=lobby.id) }}" class="inline"
+            style="display:flex;gap:0.4rem;align-items:center">
+        <label for="max_players" style="font-size:0.85rem;color:#6b7280;white-space:nowrap">Player limit:</label>
+        <input type="number" id="max_players" name="max_players" value="{{ lobby.max_players }}"
+               min="{{ lobby.player_count }}" max="32" style="width:4rem"
+               {% if lobby.is_locked %}disabled title="Unlock lobby to edit"{% endif %}>
+        <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.25rem 0.6rem"
+                {% if lobby.is_locked %}disabled title="Unlock lobby to edit"{% endif %}>Update</button>
+      </form>
+      {% if not lobby.is_archived %}
+      <form method="post" action="{{ url_for('lobby.lock', lobby_id=lobby.id) }}" class="inline">
+        {% if lobby.is_locked %}
+          <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
+        {% else %}
+          <button type="submit" class="btn btn-primary"
+                  {% if lobby.player_count < lobby.max_players %}
+                    disabled title="Lobby must be full to lock ({{ lobby.player_count }}/{{ lobby.max_players }})"
+                  {% endif %}>Start Game</button>
+        {% endif %}
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('lobby.archive', lobby_id=lobby.id) }}" class="inline">
+        {% if lobby.is_archived %}
+          <button type="submit" class="btn btn-secondary" style="font-size:0.85rem">Unarchive</button>
+        {% else %}
+          <button type="submit" class="btn btn-secondary" style="font-size:0.85rem"
+                  onclick="return confirm('Archive this lobby? It will move to the Archived tab.')">Archive</button>
+        {% endif %}
+      </form>
+      <form method="post" action="{{ url_for('lobby.delete', lobby_id=lobby.id) }}" class="inline"
+            onsubmit="return confirm('Delete this lobby and all its savegames?')">
+        <button type="submit" class="btn btn-danger">Delete Lobby</button>
+      </form>
+    {% else %}
+      {% if not lobby.is_locked %}
+      <form method="post" action="{{ url_for('lobby.leave', lobby_id=lobby.id) }}" class="inline"
+            onsubmit="return confirm('Leave this lobby?')">
+        <button type="submit" class="btn btn-secondary">Leave</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Turn status banner -->
+<div id="turn-banner-container">
+{% if lobby.is_locked %}
+  {% if lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
+    <div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">
+      &#9654; IT'S YOUR TURN — Round {{ lobby.current_round }}
+    </div>
+  {% else %}
+    <div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">
+      Round {{ lobby.current_round }} — Waiting for <strong style="color:#a855f7">{{ lobby.current_member.user.username if lobby.current_member else '?' }}</strong>…
+    </div>
+  {% endif %}
+{% endif %}
+</div>
+
+<style>
+@keyframes turn-pulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(0,255,65,0.2); }
+  50%       { box-shadow: 0 0 24px rgba(0,255,65,0.45); }
+}
+</style>
+
+<!-- 3-column layout -->
+<div style="display:grid;grid-template-columns:260px 1fr 320px;gap:1.25rem;align-items:start">
+
+  <!-- LEFT: Players + Notes -->
+  <div>
+
+    <!-- Players -->
+    <div class="card">
+      <h3 style="margin-top:0;color:#e0e0e0">
+        Players ({{ lobby.player_count }}/<span id="lobby-max-display">{{ lobby.max_players }}</span>)
+        {% if lobby.is_locked %}<span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle;border:1px solid rgba(240,228,0,0.4)">locked</span>{% endif %}
+      </h3>
+      <ul style="list-style:none;padding:0;margin:0">
+        {% if lobby.is_locked %}
+          {% for m in lobby.ordered_members %}
+            {% set is_current = lobby.current_member and lobby.current_member.user_id == m.user_id %}
+            <li data-user-id="{{ m.user_id }}" style="padding:0.35rem 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:0.5rem{% if is_current %};font-weight:700;color:#00ff41{% endif %}">
+              <span style="color:#4b5563;font-size:0.8rem;min-width:1.4rem">{{ m.play_order + 1 }}.</span>
+              {{ m.user.username }}
+              {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
+              {% if is_current %}<span style="background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)">&#9654;</span>{% endif %}
+            </li>
+          {% endfor %}
+        {% else %}
+          {% for m in lobby.members %}
+            <li data-user-id="{{ m.user_id }}" style="padding:0.35rem 0;border-bottom:1px solid #1a1a2e;display:flex;align-items:center;gap:0.5rem">
+              {{ m.user.username }}
+              {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
+            </li>
+          {% endfor %}
+        {% endif %}
+      </ul>
+    </div>
+
+    <!-- My Notes -->
+    <div class="card">
+      <h3 style="margin-top:0;font-size:1rem;color:#e0e0e0">
+        My Notes
+        <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
+      </h3>
+
+      <h4 style="margin:0 0 0.4rem;font-size:0.85rem;color:#9ca3af">General</h4>
+      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}">
+        <input type="hidden" name="round_number" value="">
+        <textarea name="content" rows="4" placeholder="Strategy, reminders…"
+                  style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.85rem">{{ general_note.content if general_note else '' }}</textarea>
+        <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.3rem 0.7rem">Save</button>
+      </form>
+
+      <h4 style="margin:1rem 0 0.4rem;font-size:0.85rem;color:#9ca3af">Round Notes</h4>
+      <div style="max-height:200px;overflow-y:auto;margin-bottom:0.6rem">
+        <table id="round-notes-table" style="font-size:0.8rem"{% if not round_notes %} hidden{% endif %}>
+          <thead><tr><th>Rnd</th><th>Note</th></tr></thead>
+          <tbody id="round-notes-tbody">
+            {% for rn in round_notes %}
+            <tr data-round="{{ rn.round_number }}">
+              <td style="text-align:center;white-space:nowrap;color:#a855f7">{{ rn.round_number }}</td>
+              <td style="white-space:pre-wrap;word-break:break-word">{{ rn.content }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p id="round-notes-empty" style="color:#4b5563;font-size:0.8rem;margin:0"{% if round_notes %} hidden{% endif %}>No round notes yet.</p>
+      </div>
+      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
+            style="display:flex;gap:0.4rem;align-items:flex-end">
+        <div>
+          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Rnd #</label>
+          <input type="number" name="round_number" min="1" required style="width:4.5rem;margin-bottom:0" placeholder="1"
+                 value="{{ lobby.current_round if lobby.is_locked else '' }}">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Note</label>
+          <input type="text" name="content" placeholder="What happened?" style="margin-bottom:0">
+        </div>
+        <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.6rem;white-space:nowrap">Save</button>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- CENTER: Savegames + Upload -->
+  <div>
+    <div class="card">
+      <h3 style="margin-top:0;color:#e0e0e0">Savegames</h3>
+      {% if savegames %}
+        <table>
+          <thead>
+            <tr>
+              <th>Round</th>
+              <th>File</th>
+              <th>Player</th>
+              <th>Note</th>
+              <th>Date</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="savegames-tbody">
+            {% for sg in savegames %}
+            <tr>
+              <td style="color:#a855f7">{{ sg.round_number }}</td>
+              <td style="font-size:0.85rem;word-break:break-all">{{ sg.original_name }}</td>
+              <td style="font-size:0.9rem">{{ sg.uploader.username }}</td>
+              <td style="color:#6b7280;font-size:0.85rem">{{ sg.note or '—' }}</td>
+              <td style="font-size:0.8rem;white-space:nowrap;color:#4b5563">{{ sg.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td>
+                <a href="{{ url_for('savegame.download', file_id=sg.id) }}" class="btn btn-secondary"
+                   style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p id="savegames-empty" style="color:#4b5563;font-size:0.9rem;margin:0">No savegames yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" id="upload-card">
+      <h3 style="margin-top:0;color:#e0e0e0">Upload &amp; End Turn</h3>
+      <div id="upload-section">
+      {% if lobby.is_locked and lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
+        <form method="post" action="{{ url_for('savegame.upload', lobby_id=lobby.id) }}"
+              enctype="multipart/form-data" id="upload-form">
+          <label for="savegame">Savegame File *</label>
+          <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem;color:#e0e0e0">
+          <label for="note">Note (optional)</label>
+          <input type="text" id="note" name="note" placeholder="e.g. took the northern route">
+          <button type="submit" class="btn btn-primary">Upload &amp; End Turn</button>
+        </form>
+      {% elif lobby.is_locked %}
+        <p style="color:#4b5563;font-size:0.9rem;margin:0">Not your turn — upload is disabled.</p>
+      {% else %}
+        <p style="color:#4b5563;font-size:0.9rem;margin:0">Game hasn't started yet.</p>
+      {% endif %}
+      </div><!-- /upload-section -->
+    </div><!-- /upload-card -->
+  </div><!-- /CENTER column -->
+
+  <!-- RIGHT: Chat -->
+  <div class="card" style="padding:1rem" id="chat">
+    <h3 style="margin:0 0 0.75rem;font-size:1rem;color:#e0e0e0">Lobby Chat</h3>
+
+    <!-- Message list -->
+    <div id="chat-log"
+         data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
+         style="height:420px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+      {% if chat_messages %}
+        {% for msg in chat_messages %}
+          <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
+            <span style="font-weight:600;color:{% if msg.user_id == session['user_id'] %}#f0e400{% else %}#a855f7{% endif %}">{{ msg.user.username }}</span>
+            <span style="color:#4b5563;font-size:0.75rem;margin-left:0.3rem">{{ msg.created_at.strftime('%H:%M') }}</span>
+            <div style="margin-top:0.1rem;word-break:break-word;color:#c0c0d0">{{ msg.content }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p id="chat-empty" style="color:#4b5563;font-size:0.85rem;margin:auto;text-align:center">No messages yet. Say hello!</p>
+      {% endif %}
+    </div>
+
+    <!-- Send form -->
+    <form method="post" action="{{ url_for('lobby.post_chat', lobby_id=lobby.id) }}"
+          style="display:flex;gap:0.5rem">
+      <input type="text" name="content" id="chat-input" placeholder="Type a message…"
+             maxlength="1000" autocomplete="off"
+             style="flex:1;margin-bottom:0">
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap">Send</button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+// ── Utilities ──────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+function showFeedback(btn, msg, isErr) {
+  var old=btn.parentNode.querySelector('.fb'); if(old) old.remove();
+  var s=document.createElement('span'); s.className='fb';
+  s.textContent=' '+msg;
+  s.style.cssText='font-size:0.8rem;margin-left:0.5rem;color:'+(isErr?'#ef4444':'#00ff41');
+  btn.parentNode.insertBefore(s, btn.nextSibling);
+  setTimeout(function(){ s.style.opacity='0'; setTimeout(function(){s.remove();},400); }, 2500);
+}
+function ajaxPost(url, fd, cb) {
+  fetch(url,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd,credentials:'same-origin'})
+    .then(function(r){return r.json();}).then(cb)
+    .catch(function(){cb({ok:false,error:'Network error'});});
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+var log       = document.getElementById('chat-log');
+var chatForm  = document.querySelector('form[action="'+CHAT_URL+'"]');
+var chatInput = document.getElementById('chat-input');
+var latestTs  = log ? (log.dataset.latestTs||'') : '';
+var seenIds   = {};
+
+if (log) {
+  log.querySelectorAll('[data-msg-id]').forEach(function(el){ seenIds[el.dataset.msgId]=true; });
+  log.scrollTop = log.scrollHeight;
+}
+
+function buildMsg(m) {
+  var d=document.createElement('div');
+  d.style.cssText='font-size:0.88rem;line-height:1.4';
+  d.dataset.msgId=m.id;
+  var col=m.user_id===SESSION_UID?'#f0e400':'#a855f7';
+  d.innerHTML=
+    '<span style="font-weight:600;color:'+col+'">'+escHtml(m.username)+'</span>'+
+    '<span style="color:#4b5563;font-size:0.75rem;margin-left:0.3rem">'+fmtTime(m.created_at)+'</span>'+
+    '<div style="margin-top:0.1rem;word-break:break-word;color:#c0c0d0">'+escHtml(m.content)+'</div>';
+  return d;
+}
+function appendMsg(m) {
+  var near=log.scrollHeight-log.scrollTop-log.clientHeight<50;
+  var emp=document.getElementById('chat-empty'); if(emp) emp.remove();
+  log.appendChild(buildMsg(m));
+  if(near) log.scrollTop=log.scrollHeight;
+}
+
+if (chatForm) {
+  chatForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var content=chatInput.value.trim(); if(!content) return;
+    var fd=new FormData(chatForm);
+    chatInput.value=''; chatInput.disabled=true;
+    ajaxPost(CHAT_URL, fd, function(data){
+      chatInput.disabled=false; chatInput.focus();
+      if(data.ok && data.message){
+        seenIds[data.message.id]=true; latestTs=data.message.created_at;
+        appendMsg(data.message);
+      }
+    });
+  });
+  chatInput.addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatForm.requestSubmit();}
+  });
+}
+
+// Polling
+var pollInFlight=false;
+function poll(){
+  if(pollInFlight||!log||document.visibilityState==='hidden') return;
+  pollInFlight=true;
+  fetch(MSG_URL+(latestTs?'?after='+encodeURIComponent(latestTs):''),
+    {headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      (data.messages||[]).forEach(function(m){
+        if(seenIds[m.id]) return;
+        seenIds[m.id]=true; latestTs=m.created_at; appendMsg(m);
+      });
+    }).catch(function(){}).finally(function(){pollInFlight=false;});
+}
+var pollTimer=setInterval(poll,4000);
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'){ clearInterval(pollTimer); pollTimer=null; }
+  else { poll(); pollTimer=setInterval(poll,4000); }
+});
+
+// ── Notes ──────────────────────────────────────────────────────────────────
+var noteTable=document.getElementById('round-notes-table');
+var noteTbody=document.getElementById('round-notes-tbody');
+var noteEmpty=document.getElementById('round-notes-empty');
+
+document.querySelectorAll('form[action="'+NOTE_URL+'"]').forEach(function(form){
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    var btn=form.querySelector('[type=submit]');
+    ajaxPost(NOTE_URL, new FormData(form), function(data){
+      if(!data.ok){ showFeedback(btn,'Error: '+(data.error||'failed'),true); return; }
+      showFeedback(btn,'Saved \u2713',false);
+      if(data.round_number!==null && data.round_number!==undefined){
+        var existing=noteTbody?noteTbody.querySelector('[data-round="'+data.round_number+'"]'):null;
+        if(existing){
+          existing.querySelectorAll('td')[1].textContent=data.content;
+        } else {
+          var tr=document.createElement('tr'); tr.dataset.round=data.round_number;
+          tr.innerHTML=
+            '<td style="text-align:center;white-space:nowrap;color:#a855f7">'+data.round_number+'</td>'+
+            '<td style="white-space:pre-wrap;word-break:break-word">'+escHtml(data.content)+'</td>';
+          if(noteTbody){
+            // Insert in descending round-number order
+            var rows=Array.from(noteTbody.querySelectorAll('tr'));
+            var insertBefore=rows.find(function(r){return parseInt(r.dataset.round)<data.round_number;})||null;
+            noteTbody.insertBefore(tr,insertBefore);
+          }
+          if(noteTable) noteTable.removeAttribute('hidden');
+          if(noteEmpty) noteEmpty.setAttribute('hidden','');
+        }
+        var ri=form.querySelector('[name=round_number]'); if(ri) ri.value='';
+        var ci=form.querySelector('[name=content]');     if(ci) ci.value='';
+      }
+    });
+  });
+});
+
+// ── Edit max_players ────────────────────────────────────────────────────────
+var editForm=document.querySelector('form[action="'+EDIT_URL+'"]');
+if(editForm){
+  editForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var btn=editForm.querySelector('[type=submit]');
+    ajaxPost(EDIT_URL, new FormData(editForm), function(data){
+      if(!data.ok){ showFeedback(btn,'Error: '+(data.error||'failed'),true); return; }
+      showFeedback(btn,'Updated \u2713',false);
+      var span=document.getElementById('lobby-max-display');
+      if(span) span.textContent=data.max_players;
+    });
+  });
+}
+
+// ── Upload & End Turn (AJAX) ────────────────────────────────────────────────
+var uploadForm=document.getElementById('upload-form');
+if(uploadForm){
+  uploadForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var file=document.getElementById('savegame').files[0];
+    if(!file) return;
+    if(file.size>64*1024*1024){alert('File exceeds 64 MB limit.'); return;}
+    var btn=uploadForm.querySelector('[type=submit]');
+    btn.disabled=true; btn.textContent='Uploading\u2026';
+    ajaxPost(UPLOAD_URL, new FormData(uploadForm), function(data){
+      btn.disabled=false; btn.textContent='Upload \u0026 End Turn';
+      if(!data.ok){showFeedback(btn,'Error: '+(data.error||'failed'),true); return;}
+
+      // 1. Update turn banner
+      var round=data.current_round;
+      var nextUser=escHtml(data.current_player_username||'?');
+      var turnC=document.getElementById('turn-banner-container');
+      if(turnC){
+        if(data.is_my_turn_now){
+          turnC.innerHTML='<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round '+round+'</div>';
+        } else {
+          turnC.innerHTML='<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round '+round+' \u2014 Waiting for <strong style="color:#a855f7">'+nextUser+'</strong>\u2026</div>';
+        }
+      }
+
+      // 2. Swap upload section
+      var sec=document.getElementById('upload-section');
+      if(sec){
+        if(data.is_my_turn_now){window.location.reload(); return;}
+        sec.innerHTML='<p style="color:#4b5563;font-size:0.9rem;margin:0">Not your turn \u2014 upload is disabled.</p>';
+      }
+
+      // 3. Update player highlights
+      document.querySelectorAll('li[data-user-id]').forEach(function(li){
+        var uid=parseInt(li.dataset.userId);
+        var cur=uid===data.current_player_user_id;
+        li.style.fontWeight=cur?'700':'';
+        li.style.color=cur?'#00ff41':'';
+      });
+
+      // 4. Prepend new savegame row
+      var tbody=document.getElementById('savegames-tbody');
+      var sg=data.savegame;
+      if(tbody&&sg){
+        var emp=document.getElementById('savegames-empty'); if(emp) emp.remove();
+        var tr=document.createElement('tr');
+        tr.innerHTML=
+          '<td style="color:#a855f7">'+sg.round_number+'</td>'+
+          '<td style="font-size:0.85rem;word-break:break-all">'+escHtml(sg.original_name)+'</td>'+
+          '<td style="font-size:0.9rem">'+escHtml(sg.uploader_username)+'</td>'+
+          '<td style="color:#6b7280;font-size:0.85rem">'+escHtml(sg.note||'\u2014')+'</td>'+
+          '<td style="font-size:0.8rem;white-space:nowrap;color:#4b5563">'+fmtTime(sg.uploaded_at)+'</td>'+
+          '<td><a href="'+sg.download_url+'" class="btn btn-secondary" style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a></td>';
+        tbody.insertBefore(tr,tbody.firstChild);
+      }
+
+      uploadForm.reset();
+    });
+  });
+}
+</script>
+{% endblock %}
