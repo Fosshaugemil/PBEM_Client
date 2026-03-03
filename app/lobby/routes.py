@@ -242,6 +242,32 @@ def save_note(lobby_id):
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
 
+@lobby_bp.route('/<int:lobby_id>/note/delete', methods=['POST'])
+@login_required
+def delete_note(lobby_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    try:
+        round_number = int(request.form.get('round_number', ''))
+        if round_number < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Invalid round number.'}), 400
+        flash('Invalid round number.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    note = PlayerNote.query.filter_by(
+        user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number).first()
+    if note:
+        db.session.delete(note)
+        db.session.commit()
+    if is_ajax:
+        return jsonify({'ok': True, 'round_number': round_number})
+    flash('Round note deleted.')
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+
 @lobby_bp.route('/<int:lobby_id>/chat', methods=['POST'])
 @login_required
 def post_chat(lobby_id):
@@ -281,6 +307,33 @@ def get_messages(lobby_id):
         'id': m.id, 'user_id': m.user_id, 'username': m.user.username,
         'content': m.content, 'created_at': m.created_at.isoformat() + 'Z',
     } for m in query.limit(50).all()]})
+
+
+@lobby_bp.route('/<int:lobby_id>/state')
+@login_required
+def get_state(lobby_id):
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    lobby = Lobby.query.get_or_404(lobby_id)
+    cur = lobby.current_member
+    savegames = (SavegameFile.query
+                 .filter_by(lobby_id=lobby_id)
+                 .order_by(SavegameFile.uploaded_at.desc())
+                 .all())
+    return jsonify({
+        'current_round': lobby.current_round,
+        'current_player_user_id': cur.user_id if cur else None,
+        'current_player_username': cur.user.username if cur else None,
+        'savegames': [{
+            'id': sg.id,
+            'round_number': sg.round_number,
+            'original_name': sg.original_name,
+            'uploader_username': sg.uploader.username,
+            'note': sg.note or '',
+            'uploaded_at': sg.uploaded_at.isoformat() + 'Z',
+            'download_url': url_for('savegame.download', file_id=sg.id),
+        } for sg in savegames],
+    })
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
