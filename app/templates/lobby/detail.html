@@ -136,7 +136,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
       </h3>
       <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}">
         <input type="hidden" name="round_number" value="">
-        <textarea name="content" rows="4" placeholder="Strategy, reminders…"
+        <textarea name="content" rows="3" placeholder="Strategy, reminders…"
                   style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.85rem">{{ general_note.content if general_note else '' }}</textarea>
         <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.3rem 0.7rem">Save</button>
       </form>
@@ -148,7 +148,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         Round Notes
         <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
       </h3>
-      <div style="max-height:320px;overflow-y:auto;margin-bottom:0.75rem">
+      <div style="margin-bottom:0.75rem">
         <table id="round-notes-table" style="font-size:0.85rem;width:100%"{% if not round_notes %} hidden{% endif %}>
           <thead><tr><th>Rnd</th><th>Note</th><th style="width:1.8rem"></th></tr></thead>
           <tbody id="round-notes-tbody">
@@ -190,6 +190,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
       <h3 style="margin-top:0;color:#e0e0e0">Savegames</h3>
       <div id="savegames-container">
       {% if savegames %}
+        {% set sg = savegames[0] %}
         <table>
           <thead>
             <tr>
@@ -202,7 +203,6 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
             </tr>
           </thead>
           <tbody id="savegames-tbody">
-            {% for sg in savegames %}
             <tr data-sg-id="{{ sg.id }}">
               <td style="color:#a855f7">{{ sg.round_number }}</td>
               <td style="font-size:0.85rem;word-break:break-all">{{ sg.original_name }}</td>
@@ -214,7 +214,6 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
                    style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a>
               </td>
             </tr>
-            {% endfor %}
           </tbody>
         </table>
       {% else %}
@@ -255,7 +254,7 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
     <!-- Message list -->
     <div id="chat-log"
          data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
-         style="height:420px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+         style="border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
       {% if chat_messages %}
         {% for msg in chat_messages %}
           <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
@@ -312,7 +311,6 @@ var seenIds   = {};
 
 if (log) {
   log.querySelectorAll('[data-msg-id]').forEach(function(el){ seenIds[el.dataset.msgId]=true; });
-  log.scrollTop = log.scrollHeight;
 }
 
 // ── Chat sound ──────────────────────────────────────────────────────────────
@@ -379,10 +377,8 @@ function buildMsg(m) {
   return d;
 }
 function appendMsg(m) {
-  var near=log.scrollHeight-log.scrollTop-log.clientHeight<50;
   var emp=document.getElementById('chat-empty'); if(emp) emp.remove();
   log.appendChild(buildMsg(m));
-  if(near) log.scrollTop=log.scrollHeight;
   if (m.user_id !== SESSION_UID) playNotifSound();
 }
 
@@ -462,11 +458,11 @@ function pollState() {
         wasMyTurn = nowMyTurn;
       }
 
-      // Inject new savegame rows
-      (data.savegames || []).forEach(function(sg){
-        if (knownSgIds.has(sg.id)) return;
-        knownSgIds.add(sg.id);
-        // Lazily create the table if no savegames existed at page load
+      // Inject new savegame rows — only keep the latest one visible
+      var newSgs = (data.savegames || []).filter(function(sg){ return !knownSgIds.has(sg.id); });
+      newSgs.forEach(function(sg){ knownSgIds.add(sg.id); });
+      if (newSgs.length > 0) {
+        var latestSg = newSgs[0]; // data.savegames is DESC ordered, newest first
         var tbody = document.getElementById('savegames-tbody');
         if (!tbody) {
           var container = document.getElementById('savegames-container');
@@ -479,9 +475,11 @@ function pollState() {
           if (container) container.appendChild(tbl);
           tbody = document.getElementById('savegames-tbody');
         }
-        if (!tbody) return;
-        tbody.insertBefore(buildSgRow(sg), tbody.firstChild);
-      });
+        if (tbody) {
+          while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+          tbody.appendChild(buildSgRow(latestSg));
+        }
+      }
     })
     .catch(function(){})
     .finally(function(){ stateInFlight = false; });
@@ -612,14 +610,14 @@ if(uploadForm){
         li.style.color=cur?'#00ff41':'';
       });
 
-      // 4. Prepend new savegame row
+      // 4. Replace savegame display with only the new row
       var tbody=document.getElementById('savegames-tbody');
       var sg=data.savegame;
       if(tbody&&sg){
         var emp=document.getElementById('savegames-empty'); if(emp) emp.remove();
-        var tr=buildSgRow(sg);
         knownSgIds.add(sg.id);
-        tbody.insertBefore(tr,tbody.firstChild);
+        while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+        tbody.appendChild(buildSgRow(sg));
       }
 
       uploadForm.reset();
