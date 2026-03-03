@@ -262,7 +262,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
     <!-- Message list -->
     <div id="chat-log"
          data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
-         style="max-height:300px;overflow:hidden;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+         style="max-height:300px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
       {% if chat_messages %}
         {% for msg in chat_messages %}
           <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
@@ -319,6 +319,7 @@ var seenIds   = {};
 
 if (log) {
   log.querySelectorAll('[data-msg-id]').forEach(function(el){ seenIds[el.dataset.msgId]=true; });
+  log.scrollTop = log.scrollHeight;
 }
 
 // ── Chat sound ──────────────────────────────────────────────────────────────
@@ -387,6 +388,7 @@ function buildMsg(m) {
 function appendMsg(m) {
   var emp=document.getElementById('chat-empty'); if(emp) emp.remove();
   log.appendChild(buildMsg(m));
+  log.scrollTop = log.scrollHeight;
   if (m.user_id !== SESSION_UID) playNotifSound();
 }
 
