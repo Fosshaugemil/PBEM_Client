@@ -19,6 +19,7 @@ class Lobby(db.Model):
     password_hash = db.Column(db.String(256), nullable=True)  # NULL = public
     max_players = db.Column(db.Integer, default=4)
     is_locked = db.Column(db.Boolean, default=False, nullable=False)
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
     current_player_idx = db.Column(db.Integer, default=0, nullable=False)
     current_round = db.Column(db.Integer, default=1, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)

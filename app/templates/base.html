@@ -6,45 +6,162 @@
   <title>{% block title %}PBEM Server{% endblock %}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    body { font-family: sans-serif; max-width: 1600px; margin: 0 auto; padding: 1rem 2rem; background: #f5f5f5; color: #222; }
-    nav { display: flex; align-items: center; gap: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #ccc; margin-bottom: 1.5rem; }
-    nav .brand { font-weight: bold; font-size: 1.2rem; margin-right: auto; }
-    a { color: #2563eb; }
-    a:hover { text-decoration: none; }
-    .btn { display: inline-block; padding: 0.4rem 0.9rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem; text-decoration: none; }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover { background: #1d4ed8; color: #fff; }
-    .btn-danger { background: #dc2626; color: #fff; }
-    .btn-danger:hover { background: #b91c1c; color: #fff; }
-    .btn-secondary { background: #6b7280; color: #fff; }
-    .btn-secondary:hover { background: #4b5563; color: #fff; }
-    .flash { padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 1rem; background: #fef3c7; border: 1px solid #f59e0b; }
-    .card { background: #fff; border: 1px solid #d1d5db; border-radius: 6px; padding: 1.5rem; margin-bottom: 1rem; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; }
-    th { background: #f9fafb; font-size: 0.85rem; text-transform: uppercase; color: #6b7280; }
-    form.inline { display: inline; }
-    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; font-weight: 500; }
-    input[type=text], input[type=password], input[type=number], textarea { width: 100%; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.95rem; margin-bottom: 0.75rem; }
-    .lock { font-size: 0.8rem; color: #9ca3af; }
-    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-    .badge-owner { background: #dbeafe; color: #1e40af; }
-    /* Lobby ribbon */
-    .lobby-ribbon { display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.5rem 0 0.6rem; margin-bottom: 1.25rem; border-bottom: 1px solid #e5e7eb; scrollbar-width: thin; }
-    .lobby-tab { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.8rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500; text-decoration: none; white-space: nowrap; border: 1px solid #d1d5db; background: #fff; color: #374151; transition: background 0.15s, border-color 0.15s; }
-    .lobby-tab:hover { background: #f3f4f6; color: #111; text-decoration: none; }
-    .lobby-tab.active-page { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
-    .lobby-tab.your-turn { background: #059669; border-color: #047857; color: #fff; animation: lobby-pulse 1.4s ease-in-out infinite; }
-    .lobby-tab.your-turn:hover { background: #047857; color: #fff; }
-    @keyframes lobby-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.55); }
-      50%       { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); }
+
+    /* ── Base ── */
+    body {
+      font-family: 'Courier New', 'Consolas', monospace;
+      max-width: 1600px; margin: 0 auto; padding: 1rem 2rem;
+      background-color: #0a0a0f;
+      background-image:
+        linear-gradient(rgba(168,85,247,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(168,85,247,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+      color: #e0e0e0;
+      position: relative;
     }
+    /* Scanline overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.04) 2px,
+        rgba(0,0,0,0.04) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Nav ── */
+    nav {
+      display: flex; align-items: center; gap: 1rem;
+      padding: 0.5rem 0; border-bottom: 1px solid #2a2a3a; margin-bottom: 1.5rem;
+    }
+    nav .brand {
+      font-weight: bold; font-size: 1.2rem; margin-right: auto;
+      color: #f0e400; text-shadow: 0 0 10px rgba(240,228,0,0.6), 0 0 20px rgba(240,228,0,0.3);
+      letter-spacing: 0.05em;
+    }
+    a { color: #a855f7; text-decoration: none; }
+    a:hover { color: #c084fc; text-decoration: underline; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-block; padding: 0.4rem 0.9rem;
+      border: none; border-radius: 4px; cursor: pointer;
+      font-size: 0.9rem; text-decoration: none;
+      font-family: inherit; transition: box-shadow 0.15s, background 0.15s, color 0.15s;
+    }
+    .btn-primary {
+      background: #f0e400; color: #0a0a0f; font-weight: 700;
+      border: 1px solid #f0e400;
+    }
+    .btn-primary:hover {
+      background: #ffe100; color: #0a0a0f;
+      box-shadow: 0 0 10px rgba(240,228,0,0.5), 0 0 20px rgba(240,228,0,0.25);
+      text-decoration: none;
+    }
+    .btn-primary:disabled { background: #4a4600; color: #6b6b00; border-color: #4a4600; cursor: not-allowed; box-shadow: none; }
+    .btn-secondary {
+      background: transparent; color: #a855f7;
+      border: 1px solid #a855f7;
+    }
+    .btn-secondary:hover {
+      background: rgba(168,85,247,0.1); color: #c084fc;
+      box-shadow: 0 0 10px rgba(168,85,247,0.4); text-decoration: none;
+    }
+    .btn-secondary:disabled { color: #4a2a6a; border-color: #4a2a6a; cursor: not-allowed; box-shadow: none; }
+    .btn-danger {
+      background: transparent; color: #ef4444;
+      border: 1px solid #ef4444;
+    }
+    .btn-danger:hover {
+      background: rgba(239,68,68,0.1); color: #f87171;
+      box-shadow: 0 0 10px rgba(239,68,68,0.4); text-decoration: none;
+    }
+
+    /* ── Flash ── */
+    .flash {
+      padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 1rem;
+      background: rgba(240,228,0,0.08); border: 1px solid #f0e400;
+      color: #f0e400;
+      box-shadow: 0 0 10px rgba(240,228,0,0.2);
+    }
+
+    /* ── Card ── */
+    .card {
+      background: #13131a; border: 1px solid #2a2a3a; border-radius: 6px;
+      padding: 1.5rem; margin-bottom: 1rem;
+      box-shadow: 0 0 14px rgba(168,85,247,0.07);
+    }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #2a2a3a; }
+    th { background: #1a1a2e; font-size: 0.85rem; text-transform: uppercase; color: #6b7280; letter-spacing: 0.04em; }
+    tbody tr:hover { background: rgba(168,85,247,0.05); }
+
+    /* ── Forms ── */
+    form.inline { display: inline; }
+    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; font-weight: 500; color: #a0a0b0; }
+    input[type=text], input[type=password], input[type=number], textarea {
+      width: 100%; padding: 0.4rem 0.6rem;
+      border: 1px solid #2a2a3a; border-radius: 4px;
+      font-size: 0.95rem; margin-bottom: 0.75rem;
+      background: #1a1a2e; color: #e0e0e0;
+      font-family: inherit;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, textarea:focus {
+      outline: none;
+      border-color: #a855f7;
+      box-shadow: 0 0 8px rgba(168,85,247,0.35);
+    }
+    input::placeholder, textarea::placeholder { color: #4b5563; }
+
+    /* ── Misc ── */
+    .lock { font-size: 0.8rem; color: #6b7280; }
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-owner { background: rgba(168,85,247,0.2); color: #c084fc; border: 1px solid #a855f7; }
+
+    /* ── Lobby ribbon ── */
+    .lobby-ribbon {
+      display: flex; gap: 0.5rem; overflow-x: auto;
+      padding: 0.5rem 0 0.6rem; margin-bottom: 1.25rem;
+      border-bottom: 1px solid #2a2a3a; scrollbar-width: thin;
+      scrollbar-color: #2a2a3a #0a0a0f;
+    }
+    .lobby-tab {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.8rem; border-radius: 999px;
+      font-size: 0.82rem; font-weight: 500; text-decoration: none;
+      white-space: nowrap; border: 1px solid #2a2a3a;
+      background: #13131a; color: #9ca3af;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .lobby-tab:hover { background: #1a1a2e; color: #e0e0e0; text-decoration: none; }
+    .lobby-tab.active-page { border-color: #f0e400; color: #f0e400; background: rgba(240,228,0,0.07); }
+    .lobby-tab.your-turn {
+      background: rgba(0,255,65,0.12); border-color: #00ff41; color: #00ff41;
+      animation: lobby-pulse 1.4s ease-in-out infinite;
+    }
+    .lobby-tab.your-turn:hover { background: rgba(0,255,65,0.2); color: #00ff41; }
+    @keyframes lobby-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,65,0.55); }
+      50%       { box-shadow: 0 0 0 6px rgba(0,255,65,0); }
+    }
+
+    /* ── Headings ── */
+    h1, h2, h3 { color: #e0e0e0; letter-spacing: 0.02em; }
+    h2 { color: #f0e400; text-shadow: 0 0 8px rgba(240,228,0,0.25); }
   </style>
 </head>
 <body>
   <nav>
-    <span class="brand">PBEM Server</span>
+    <span class="brand">&#9656; PBEM.SYS</span>
     {% if session.get('user_id') %}
       <a href="{{ url_for('lobby.list_lobbies') }}">Lobbies</a>
       <span style="color:#6b7280">{{ session.get('username') }}</span>
@@ -66,7 +183,7 @@
         {% if item.is_my_turn %}<span>&#9654;</span>{% endif %}
         {{ item.lobby.name }}
         {% if item.lobby.is_locked %}
-          <span style="opacity:0.75;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
+          <span style="opacity:0.65;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
         {% endif %}
       </a>
     {% endfor %}

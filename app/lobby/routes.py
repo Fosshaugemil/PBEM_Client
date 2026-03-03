@@ -128,6 +128,10 @@ def leave(lobby_id):
         flash('Owners cannot leave — delete the lobby instead.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
+    if lobby.is_locked:
+        flash('Cannot leave while the game is in progress.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
     member = LobbyMember.query.filter_by(lobby_id=lobby_id, user_id=session['user_id']).first()
     if member:
         db.session.delete(member)
@@ -253,3 +257,16 @@ def delete(lobby_id):
     db.session.commit()
     flash(f'Lobby "{lobby.name}" deleted.')
     return redirect(url_for('lobby.list_lobbies'))
+
+
+@lobby_bp.route('/<int:lobby_id>/archive', methods=['POST'])
+@login_required
+def archive(lobby_id):
+    lobby = Lobby.query.get_or_404(lobby_id)
+    if lobby.owner_id != session['user_id']:
+        abort(403)
+    lobby.is_archived = not lobby.is_archived
+    db.session.commit()
+    action = 'archived' if lobby.is_archived else 'unarchived'
+    flash(f'Lobby "{lobby.name}" {action}.')
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id))
