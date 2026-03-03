@@ -26,11 +26,16 @@
           {% if lobby.is_password_protected %}<span class="lock" title="Password protected">🔒</span>{% endif %}
         </td>
         <td style="color:#6b7280;font-size:0.9rem">{{ lobby.description or '—' }}</td>
-        <td>{{ lobby.player_count }} / {{ lobby.max_players }}</td>
+        <td>
+          {{ lobby.player_count }} / {{ lobby.max_players }}
+          {% if lobby.is_locked %}<span style="background:#fef3c7;color:#92400e;font-size:0.75rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;margin-left:0.3rem">🔐 Locked</span>{% endif %}
+        </td>
         <td style="font-size:0.9rem">{{ lobby.owner.username }}</td>
         <td style="text-align:right">
           {% if lobby.id in user_lobby_ids %}
             <a href="{{ url_for('lobby.detail', lobby_id=lobby.id) }}" class="btn btn-primary">View</a>
+          {% elif lobby.is_locked %}
+            <span style="color:#9ca3af;font-size:0.9rem">Locked</span>
           {% elif lobby.player_count >= lobby.max_players %}
             <span style="color:#9ca3af;font-size:0.9rem">Full</span>
           {% else %}

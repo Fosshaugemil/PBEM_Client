@@ -3,8 +3,10 @@ import os
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, abort, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 
+from datetime import datetime
+
 from .. import db, login_required
-from ..models import Lobby, LobbyMember, SavegameFile, User
+from ..models import Lobby, LobbyMember, PlayerNote, SavegameFile, User
 
 lobby_bp = Blueprint('lobby', __name__)
 
@@ -72,7 +74,16 @@ def detail(lobby_id):
         flash('You must join this lobby first.')
         return redirect(url_for('lobby.list_lobbies'))
     savegames = SavegameFile.query.filter_by(lobby_id=lobby_id).order_by(SavegameFile.uploaded_at.desc()).all()
-    return render_template('lobby/detail.html', lobby=lobby, savegames=savegames)
+    general_note = PlayerNote.query.filter_by(
+        user_id=session['user_id'], lobby_id=lobby_id, round_number=None).first()
+    round_notes = (PlayerNote.query
+                   .filter(PlayerNote.user_id == session['user_id'],
+                           PlayerNote.lobby_id == lobby_id,
+                           PlayerNote.round_number.isnot(None))
+                   .order_by(PlayerNote.round_number.desc())
+                   .limit(5).all())
+    return render_template('lobby/detail.html', lobby=lobby, savegames=savegames,
+                           general_note=general_note, round_notes=round_notes)
 
 
 @lobby_bp.route('/<int:lobby_id>/join', methods=['POST'])
@@ -82,6 +93,10 @@ def join(lobby_id):
 
     if _is_member(lobby_id, session['user_id']):
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+    if lobby.is_locked:
+        flash('This lobby is locked and no longer accepting players.')
+        return redirect(url_for('lobby.list_lobbies'))
 
     if lobby.player_count >= lobby.max_players:
         flash('Lobby is full.')
@@ -113,6 +128,84 @@ def leave(lobby_id):
         db.session.delete(member)
         db.session.commit()
     return redirect(url_for('lobby.list_lobbies'))
+
+
+@lobby_bp.route('/<int:lobby_id>/edit', methods=['POST'])
+@login_required
+def edit(lobby_id):
+    lobby = Lobby.query.get_or_404(lobby_id)
+    if lobby.owner_id != session['user_id']:
+        abort(403)
+    if lobby.is_locked:
+        flash('Unlock the lobby before changing player limit.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    try:
+        new_max = int(request.form.get('max_players', ''))
+        if new_max < 2:
+            raise ValueError
+    except ValueError:
+        flash('Player limit must be a number >= 2.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    if new_max < lobby.player_count:
+        flash(f'Cannot set limit below current player count ({lobby.player_count}).')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    lobby.max_players = new_max
+    db.session.commit()
+    flash('Player limit updated.')
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+
+@lobby_bp.route('/<int:lobby_id>/lock', methods=['POST'])
+@login_required
+def lock(lobby_id):
+    lobby = Lobby.query.get_or_404(lobby_id)
+    if lobby.owner_id != session['user_id']:
+        abort(403)
+    if lobby.is_locked:
+        lobby.is_locked = False
+        db.session.commit()
+        flash('Lobby unlocked — players can join again.')
+    else:
+        if lobby.player_count < lobby.max_players:
+            flash(f'Lobby must be full before locking ({lobby.player_count}/{lobby.max_players} players).')
+            return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+        lobby.is_locked = True
+        db.session.commit()
+        flash('Lobby locked. Game can begin!')
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+
+@lobby_bp.route('/<int:lobby_id>/note', methods=['POST'])
+@login_required
+def save_note(lobby_id):
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    content = request.form.get('content', '').strip()
+    round_str = request.form.get('round_number', '').strip()
+    round_number = None
+    if round_str:
+        try:
+            round_number = int(round_str)
+            if round_number < 1:
+                raise ValueError
+        except ValueError:
+            flash('Round number must be a positive integer.')
+            return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    if not content:
+        flash('Note cannot be empty.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+    note = PlayerNote.query.filter_by(
+        user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number).first()
+    if note:
+        note.content = content
+        note.updated_at = datetime.utcnow()
+    else:
+        note = PlayerNote(user_id=session['user_id'], lobby_id=lobby_id,
+                          round_number=round_number, content=content)
+        db.session.add(note)
+    db.session.commit()
+    flash('Note saved.')
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
