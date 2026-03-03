@@ -27,6 +27,7 @@ class Lobby(db.Model):
     owner = db.relationship('User')
     members = db.relationship('LobbyMember', back_populates='lobby', cascade='all, delete-orphan')
     savegames = db.relationship('SavegameFile', back_populates='lobby', cascade='all, delete-orphan')
+    chat_messages = db.relationship('ChatMessage', cascade='all, delete-orphan')
 
     @property
     def is_password_protected(self):
@@ -85,3 +86,13 @@ class PlayerNote(db.Model):
     round_number = db.Column(db.Integer, nullable=True)  # NULL = general note
     content = db.Column(db.Text, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.String(1000), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User')

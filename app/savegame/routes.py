@@ -68,6 +68,19 @@ def upload(lobby_id):
     lobby.current_player_idx = new_idx
     next_player = ordered[new_idx].user.username
 
+    # Prune saves more than 2 rounds old (keep current + previous round)
+    prune_before = lobby.current_round - 2
+    if prune_before >= 1:
+        old_saves = SavegameFile.query.filter(
+            SavegameFile.lobby_id == lobby_id,
+            SavegameFile.round_number <= prune_before,
+        ).all()
+        for old in old_saves:
+            path = os.path.join(upload_folder, old.stored_name)
+            if os.path.exists(path):
+                os.remove(path)
+            db.session.delete(old)
+
     db.session.commit()
     flash(f'Savegame uploaded. Turn passed to {next_player}.')
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))

@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
 from .. import db, login_required
-from ..models import Lobby, LobbyMember, PlayerNote, SavegameFile, User
+from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, User
 
 lobby_bp = Blueprint('lobby', __name__)
 
@@ -82,8 +82,13 @@ def detail(lobby_id):
                            PlayerNote.round_number.isnot(None))
                    .order_by(PlayerNote.round_number.desc())
                    .limit(5).all())
+    chat_messages = (ChatMessage.query
+                     .filter_by(lobby_id=lobby_id)
+                     .order_by(ChatMessage.created_at.asc())
+                     .limit(100).all())
     return render_template('lobby/detail.html', lobby=lobby, savegames=savegames,
-                           general_note=general_note, round_notes=round_notes)
+                           general_note=general_note, round_notes=round_notes,
+                           chat_messages=chat_messages)
 
 
 @lobby_bp.route('/<int:lobby_id>/join', methods=['POST'])
@@ -214,6 +219,19 @@ def save_note(lobby_id):
     db.session.commit()
     flash('Note saved.')
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+
+@lobby_bp.route('/<int:lobby_id>/chat', methods=['POST'])
+@login_required
+def post_chat(lobby_id):
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    content = request.form.get('content', '').strip()[:1000]
+    if content:
+        msg = ChatMessage(lobby_id=lobby_id, user_id=session['user_id'], content=content)
+        db.session.add(msg)
+        db.session.commit()
+    return redirect(url_for('lobby.detail', lobby_id=lobby_id, _anchor='chat'))
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])

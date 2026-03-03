@@ -2,18 +2,18 @@
 {% block title %}{{ lobby.name }} — PBEM Server{% endblock %}
 {% block content %}
 
+<!-- Header -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
   <div>
     <h2 style="margin:0 0 0.25rem">
       {{ lobby.name }}
       {% if lobby.is_password_protected %}<span class="lock" title="Password protected">🔒</span>{% endif %}
-      {% if lobby.is_locked %}<span style="background:#fef3c7;color:#92400e;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;margin-left:0.4rem">🔐 Locked</span>{% endif %}
+      {% if lobby.is_locked %}<span style="background:#fef3c7;color:#92400e;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;margin-left:0.4rem">🔐 In Progress</span>{% endif %}
     </h2>
     {% if lobby.description %}<p style="color:#6b7280;margin:0">{{ lobby.description }}</p>{% endif %}
   </div>
   <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
     {% if lobby.owner_id == session['user_id'] %}
-      <!-- Edit player limit -->
       <form method="post" action="{{ url_for('lobby.edit', lobby_id=lobby.id) }}" class="inline"
             style="display:flex;gap:0.4rem;align-items:center">
         <label for="max_players" style="font-size:0.85rem;color:#6b7280;white-space:nowrap">Player limit:</label>
@@ -23,7 +23,6 @@
         <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.25rem 0.6rem"
                 {% if lobby.is_locked %}disabled title="Unlock lobby to edit"{% endif %}>Update</button>
       </form>
-      <!-- Lock / Unlock -->
       <form method="post" action="{{ url_for('lobby.lock', lobby_id=lobby.id) }}" class="inline">
         {% if lobby.is_locked %}
           <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
@@ -31,10 +30,9 @@
           <button type="submit" class="btn btn-primary"
                   {% if lobby.player_count < lobby.max_players %}
                     disabled title="Lobby must be full to lock ({{ lobby.player_count }}/{{ lobby.max_players }})"
-                  {% endif %}>Lock Lobby</button>
+                  {% endif %}>Start Game</button>
         {% endif %}
       </form>
-      <!-- Delete -->
       <form method="post" action="{{ url_for('lobby.delete', lobby_id=lobby.id) }}" class="inline"
             onsubmit="return confirm('Delete this lobby and all its savegames?')">
         <button type="submit" class="btn btn-danger">Delete Lobby</button>
@@ -48,6 +46,7 @@
   </div>
 </div>
 
+<!-- Turn status banner -->
 {% if lobby.is_locked %}
   {% if lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
     <div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:600;color:#065f46">
@@ -60,43 +59,88 @@
   {% endif %}
 {% endif %}
 
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:1rem">
+<!-- 3-column layout -->
+<div style="display:grid;grid-template-columns:260px 1fr 320px;gap:1.25rem;align-items:start">
 
-  <!-- Members -->
-  <div class="card">
-    <h3 style="margin-top:0">
-      Players ({{ lobby.player_count }}/{{ lobby.max_players }})
-      {% if lobby.is_locked %}<span style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle">locked</span>{% endif %}
-    </h3>
-    <ul style="list-style:none;padding:0;margin:0">
-      {% if lobby.is_locked %}
-        {% for m in lobby.ordered_members %}
-          {% set is_current = lobby.current_member and lobby.current_member.user_id == m.user_id %}
-          <li style="padding:0.3rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem{% if is_current %};font-weight:700;color:#065f46{% endif %}">
-            <span style="color:#9ca3af;font-size:0.8rem;min-width:1.2rem">{{ m.play_order + 1 }}.</span>
-            {{ m.user.username }}
-            {% if m.user_id == lobby.owner_id %}
-              <span class="badge badge-owner">owner</span>
-            {% endif %}
-            {% if is_current %}
-              <span style="background:#d1fae5;color:#065f46;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600">&#9654; turn</span>
-            {% endif %}
-          </li>
-        {% endfor %}
+  <!-- LEFT: Players + Notes -->
+  <div>
+
+    <!-- Players -->
+    <div class="card">
+      <h3 style="margin-top:0">
+        Players ({{ lobby.player_count }}/{{ lobby.max_players }})
+        {% if lobby.is_locked %}<span style="background:#fef3c7;color:#92400e;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle">locked</span>{% endif %}
+      </h3>
+      <ul style="list-style:none;padding:0;margin:0">
+        {% if lobby.is_locked %}
+          {% for m in lobby.ordered_members %}
+            {% set is_current = lobby.current_member and lobby.current_member.user_id == m.user_id %}
+            <li style="padding:0.35rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem{% if is_current %};font-weight:700;color:#065f46{% endif %}">
+              <span style="color:#9ca3af;font-size:0.8rem;min-width:1.4rem">{{ m.play_order + 1 }}.</span>
+              {{ m.user.username }}
+              {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
+              {% if is_current %}<span style="background:#d1fae5;color:#065f46;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600">&#9654;</span>{% endif %}
+            </li>
+          {% endfor %}
+        {% else %}
+          {% for m in lobby.members %}
+            <li style="padding:0.35rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem">
+              {{ m.user.username }}
+              {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
+            </li>
+          {% endfor %}
+        {% endif %}
+      </ul>
+    </div>
+
+    <!-- My Notes -->
+    <div class="card">
+      <h3 style="margin-top:0;font-size:1rem">
+        My Notes
+        <span style="font-weight:400;font-size:0.8rem;color:#9ca3af">private</span>
+      </h3>
+
+      <h4 style="margin:0 0 0.4rem;font-size:0.85rem;color:#374151">General</h4>
+      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}">
+        <input type="hidden" name="round_number" value="">
+        <textarea name="content" rows="4" placeholder="Strategy, reminders…"
+                  style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.85rem">{{ general_note.content if general_note else '' }}</textarea>
+        <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.3rem 0.7rem">Save</button>
+      </form>
+
+      <h4 style="margin:1rem 0 0.4rem;font-size:0.85rem;color:#374151">Round Notes</h4>
+      {% if round_notes %}
+        <table style="margin-bottom:0.6rem;font-size:0.8rem">
+          <thead><tr><th>Rnd</th><th>Note</th></tr></thead>
+          <tbody>
+            {% for rn in round_notes %}
+            <tr>
+              <td style="text-align:center;white-space:nowrap">{{ rn.round_number }}</td>
+              <td style="white-space:pre-wrap;word-break:break-word">{{ rn.content }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       {% else %}
-        {% for m in lobby.members %}
-          <li style="padding:0.3rem 0;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:0.5rem">
-            {{ m.user.username }}
-            {% if m.user_id == lobby.owner_id %}
-              <span class="badge badge-owner">owner</span>
-            {% endif %}
-          </li>
-        {% endfor %}
+        <p style="color:#9ca3af;font-size:0.8rem;margin:0 0 0.6rem">No round notes yet.</p>
       {% endif %}
-    </ul>
+      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
+            style="display:flex;gap:0.4rem;align-items:flex-end">
+        <div>
+          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Rnd #</label>
+          <input type="number" name="round_number" min="1" style="width:4.5rem;margin-bottom:0" placeholder="1">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Note</label>
+          <input type="text" name="content" placeholder="What happened?" style="margin-bottom:0">
+        </div>
+        <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.6rem;white-space:nowrap">Save</button>
+      </form>
+    </div>
+
   </div>
 
-  <!-- Savegames -->
+  <!-- CENTER: Savegames + Upload -->
   <div>
     <div class="card">
       <h3 style="margin-top:0">Savegames</h3>
@@ -106,7 +150,7 @@
             <tr>
               <th>Round</th>
               <th>File</th>
-              <th>Uploaded by</th>
+              <th>Player</th>
               <th>Note</th>
               <th>Date</th>
               <th></th>
@@ -129,90 +173,66 @@
           </tbody>
         </table>
       {% else %}
-        <p style="color:#9ca3af;font-size:0.9rem;margin:0">No savegames uploaded yet.</p>
+        <p style="color:#9ca3af;font-size:0.9rem;margin:0">No savegames yet.</p>
       {% endif %}
     </div>
 
-    <!-- Upload form -->
     <div class="card">
-      <h3 style="margin-top:0">Upload Savegame</h3>
+      <h3 style="margin-top:0">Upload &amp; End Turn</h3>
       {% if lobby.is_locked and lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
         <form method="post" action="{{ url_for('savegame.upload', lobby_id=lobby.id) }}"
               enctype="multipart/form-data" id="upload-form">
           <label for="savegame">Savegame File *</label>
           <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem">
-
           <label for="note">Note (optional)</label>
           <input type="text" id="note" name="note" placeholder="e.g. took the northern route">
-
           <button type="submit" class="btn btn-primary">Upload &amp; End Turn</button>
         </form>
       {% elif lobby.is_locked %}
-        <p style="color:#9ca3af;font-size:0.9rem;margin:0">Upload disabled — it is not your turn.</p>
+        <p style="color:#9ca3af;font-size:0.9rem;margin:0">Not your turn — upload is disabled.</p>
       {% else %}
-        <p style="color:#9ca3af;font-size:0.9rem;margin:0">Upload disabled — game has not started yet.</p>
+        <p style="color:#9ca3af;font-size:0.9rem;margin:0">Game hasn't started yet.</p>
       {% endif %}
     </div>
   </div>
 
-</div>
+  <!-- RIGHT: Chat -->
+  <div class="card" style="padding:1rem" id="chat">
+    <h3 style="margin:0 0 0.75rem;font-size:1rem">Lobby Chat</h3>
 
-<!-- Personal Notes (full width) -->
-<div class="card" style="margin-top:1rem">
-  <h3 style="margin-top:0">My Notes <span style="font-weight:400;font-size:0.85rem;color:#6b7280">(private — only you can see these)</span></h3>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-
-    <!-- General game note -->
-    <div>
-      <h4 style="margin:0 0 0.5rem;font-size:0.95rem">General Game Notes</h4>
-      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}">
-        <input type="hidden" name="round_number" value="">
-        <textarea name="content" rows="5" placeholder="Strategy, reminders, anything about this game…"
-                  style="width:100%;box-sizing:border-box;resize:vertical">{{ general_note.content if general_note else '' }}</textarea>
-        <button type="submit" class="btn btn-primary" style="margin-top:0.5rem">Save Note</button>
-      </form>
-    </div>
-
-    <!-- Round notes -->
-    <div>
-      <h4 style="margin:0 0 0.5rem;font-size:0.95rem">Round Notes</h4>
-      {% if round_notes %}
-        <table style="margin-bottom:0.75rem;font-size:0.85rem">
-          <thead>
-            <tr><th>Round</th><th>Note</th><th>Updated</th></tr>
-          </thead>
-          <tbody>
-            {% for rn in round_notes %}
-            <tr>
-              <td style="text-align:center">{{ rn.round_number }}</td>
-              <td style="white-space:pre-wrap;max-width:18rem;word-break:break-word">{{ rn.content }}</td>
-              <td style="white-space:nowrap;color:#9ca3af">{{ rn.updated_at.strftime('%m-%d %H:%M') }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <!-- Message list -->
+    <div id="chat-log" style="height:420px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:4px;padding:0.6rem;background:#fafafa;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+      {% if chat_messages %}
+        {% for msg in chat_messages %}
+          <div style="font-size:0.88rem;line-height:1.4">
+            <span style="font-weight:600;color:{% if msg.user_id == session['user_id'] %}#1d4ed8{% else %}#374151{% endif %}">{{ msg.user.username }}</span>
+            <span style="color:#9ca3af;font-size:0.75rem;margin-left:0.3rem">{{ msg.created_at.strftime('%H:%M') }}</span>
+            <div style="margin-top:0.1rem;word-break:break-word;color:#111">{{ msg.content }}</div>
+          </div>
+        {% endfor %}
       {% else %}
-        <p style="color:#9ca3af;font-size:0.85rem">No round notes yet.</p>
+        <p style="color:#9ca3af;font-size:0.85rem;margin:auto;text-align:center">No messages yet. Say hello!</p>
       {% endif %}
-      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
-            style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap">
-        <div>
-          <label style="font-size:0.8rem;display:block;margin-bottom:0.2rem">Round #</label>
-          <input type="number" name="round_number" min="1" style="width:5rem" placeholder="1">
-        </div>
-        <div style="flex:1;min-width:8rem">
-          <label style="font-size:0.8rem;display:block;margin-bottom:0.2rem">Note</label>
-          <input type="text" name="content" placeholder="What happened this round?">
-        </div>
-        <button type="submit" class="btn btn-secondary" style="white-space:nowrap">Save Round Note</button>
-      </form>
     </div>
 
+    <!-- Send form -->
+    <form method="post" action="{{ url_for('lobby.post_chat', lobby_id=lobby.id) }}"
+          style="display:flex;gap:0.5rem">
+      <input type="text" name="content" id="chat-input" placeholder="Type a message…"
+             maxlength="1000" autocomplete="off"
+             style="flex:1;margin-bottom:0">
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap">Send</button>
+    </form>
   </div>
+
 </div>
 
 <script>
+// Scroll chat to bottom on load
+var log = document.getElementById('chat-log');
+if (log) log.scrollTop = log.scrollHeight;
+
+// File size check
 var uploadForm = document.getElementById('upload-form');
 if (uploadForm) {
     uploadForm.addEventListener('submit', function(e) {
@@ -220,6 +240,17 @@ if (uploadForm) {
         if (file && file.size > 64 * 1024 * 1024) {
             e.preventDefault();
             alert('File exceeds the 64 MB limit.');
+        }
+    });
+}
+
+// Submit chat on Enter (not Shift+Enter)
+var chatInput = document.getElementById('chat-input');
+if (chatInput) {
+    chatInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            this.closest('form').submit();
         }
     });
 }
