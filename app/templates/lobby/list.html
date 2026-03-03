@@ -6,13 +6,6 @@
   <a href="{{ url_for('lobby.create') }}" class="btn btn-primary">+ New Lobby</a>
 </div>
 
-<!-- Category tabs -->
-<div style="display:flex;gap:0.5rem;margin-bottom:1rem">
-  <button class="cat-tab" data-cat="not_started" style="padding:0.35rem 1rem;border-radius:999px;border:1px solid #2a2a3a;background:#13131a;color:#9ca3af;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:500;transition:all 0.15s">Not Started</button>
-  <button class="cat-tab" data-cat="ongoing"     style="padding:0.35rem 1rem;border-radius:999px;border:1px solid #2a2a3a;background:#13131a;color:#9ca3af;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:500;transition:all 0.15s">Ongoing</button>
-  <button class="cat-tab" data-cat="archived"    style="padding:0.35rem 1rem;border-radius:999px;border:1px solid #2a2a3a;background:#13131a;color:#9ca3af;cursor:pointer;font-family:inherit;font-size:0.85rem;font-weight:500;transition:all 0.15s">Archived</button>
-</div>
-
 {% if lobbies %}
 <div class="card" style="padding:0;overflow:hidden">
   <table>
@@ -28,14 +21,7 @@
     </thead>
     <tbody>
     {% for lobby in lobbies %}
-      {% if lobby.is_archived %}
-        {% set row_status = 'archived' %}
-      {% elif lobby.is_locked %}
-        {% set row_status = 'ongoing' %}
-      {% else %}
-        {% set row_status = 'not_started' %}
-      {% endif %}
-      <tr data-status="{{ row_status }}">
+      <tr>
         <td>
           {{ lobby.name }}
           {% if lobby.is_password_protected %}<span class="lock" title="Password protected">&#128274;</span>{% endif %}
@@ -80,42 +66,4 @@
   <p style="color:#6b7280">No lobbies yet. Create the first one!</p>
 {% endif %}
 
-<script>
-(function() {
-  var tabs = document.querySelectorAll('.cat-tab');
-  var rows = document.querySelectorAll('tr[data-status]');
-
-  function setActiveStyle(btn, active) {
-    if (active) {
-      btn.style.borderColor = '#f0e400';
-      btn.style.color = '#f0e400';
-      btn.style.background = 'rgba(240,228,0,0.08)';
-    } else {
-      btn.style.borderColor = '#2a2a3a';
-      btn.style.color = '#9ca3af';
-      btn.style.background = '#13131a';
-    }
-  }
-
-  function showCat(cat) {
-    tabs.forEach(function(t) { setActiveStyle(t, t.dataset.cat === cat); });
-    rows.forEach(function(r) {
-      r.style.display = (r.dataset.status === cat) ? '' : 'none';
-    });
-    try { localStorage.setItem('pbem_lobby_tab', cat); } catch(e) {}
-  }
-
-  var hasOngoing = false;
-  rows.forEach(function(r) { if (r.dataset.status === 'ongoing') hasOngoing = true; });
-  var saved = '';
-  try { saved = localStorage.getItem('pbem_lobby_tab') || ''; } catch(e) {}
-  var defaultCat = saved || (hasOngoing ? 'ongoing' : 'not_started');
-
-  tabs.forEach(function(t) {
-    t.addEventListener('click', function() { showCat(this.dataset.cat); });
-  });
-
-  showCat(defaultCat);
-})();
-</script>
 {% endblock %}

@@ -175,11 +175,20 @@
   </nav>
 
   {% if session.get('user_id') and lobby_ribbon %}
-  <div class="lobby-ribbon">
+  <div class="lobby-ribbon" id="lobby-ribbon">
+    <!-- Category filter pills -->
+    <button class="rcat-btn" data-cat="not_started" style="padding:0.25rem 0.7rem;border-radius:999px;border:1px solid #2a2a3a;background:#13131a;color:#9ca3af;cursor:pointer;font-family:inherit;font-size:0.78rem;font-weight:600;white-space:nowrap;letter-spacing:0.04em;transition:all 0.15s;flex-shrink:0">OPEN</button>
+    <button class="rcat-btn" data-cat="ongoing"     style="padding:0.25rem 0.7rem;border-radius:999px;border:1px solid #2a2a3a;background:#13131a;color:#9ca3af;cursor:pointer;font-family:inherit;font-size:0.78rem;font-weight:600;white-space:nowrap;letter-spacing:0.04em;transition:all 0.15s;flex-shrink:0">ACTIVE</button>
+    <button class="rcat-btn" data-cat="archived"    style="padding:0.25rem 0.7rem;border-radius:999px;border:1px solid #2a2a3a;background:#13131a;color:#9ca3af;cursor:pointer;font-family:inherit;font-size:0.78rem;font-weight:600;white-space:nowrap;letter-spacing:0.04em;transition:all 0.15s;flex-shrink:0">ARCHIVED</button>
+    <span style="color:#2a2a3a;padding:0 0.1rem;flex-shrink:0;align-self:center">&#124;</span>
     {% for item in lobby_ribbon %}
+      {% if item.lobby.is_archived %}{% set rst = 'archived' %}
+      {% elif item.lobby.is_locked %}{% set rst = 'ongoing' %}
+      {% else %}{% set rst = 'not_started' %}{% endif %}
       {% set is_active = request.path == '/lobbies/' ~ item.lobby.id %}
       <a href="{{ url_for('lobby.detail', lobby_id=item.lobby.id) }}"
-         class="lobby-tab{% if item.is_my_turn %} your-turn{% elif is_active %} active-page{% endif %}">
+         class="lobby-tab{% if item.is_my_turn %} your-turn{% elif is_active %} active-page{% endif %}"
+         data-status="{{ rst }}">
         {% if item.is_my_turn %}<span>&#9654;</span>{% endif %}
         {{ item.lobby.name }}
         {% if item.lobby.is_locked %}
@@ -187,7 +196,49 @@
         {% endif %}
       </a>
     {% endfor %}
+    <span id="ribbon-empty" style="display:none;color:#4b5563;font-size:0.82rem;font-style:italic;align-self:center">No lobbies here</span>
   </div>
+  <script>
+  (function() {
+    var btns = document.querySelectorAll('.rcat-btn');
+    var tabs = document.querySelectorAll('#lobby-ribbon .lobby-tab');
+    var empty = document.getElementById('ribbon-empty');
+
+    function setBtn(btn, active) {
+      if (active) {
+        btn.style.borderColor = '#f0e400'; btn.style.color = '#f0e400';
+        btn.style.background = 'rgba(240,228,0,0.1)';
+      } else {
+        btn.style.borderColor = '#2a2a3a'; btn.style.color = '#9ca3af';
+        btn.style.background = '#13131a';
+      }
+    }
+
+    function showCat(cat) {
+      btns.forEach(function(b) { setBtn(b, b.dataset.cat === cat); });
+      var visible = 0;
+      tabs.forEach(function(t) {
+        var show = t.dataset.status === cat;
+        t.style.display = show ? '' : 'none';
+        if (show) visible++;
+      });
+      empty.style.display = visible === 0 ? '' : 'none';
+      try { localStorage.setItem('pbem_ribbon_cat', cat); } catch(e) {}
+    }
+
+    var hasOngoing = false;
+    tabs.forEach(function(t) { if (t.dataset.status === 'ongoing') hasOngoing = true; });
+    var saved = '';
+    try { saved = localStorage.getItem('pbem_ribbon_cat') || ''; } catch(e) {}
+    var defaultCat = saved || (hasOngoing ? 'ongoing' : 'not_started');
+
+    btns.forEach(function(b) {
+      b.addEventListener('click', function() { showCat(this.dataset.cat); });
+    });
+
+    showCat(defaultCat);
+  })();
+  </script>
   {% endif %}
 
   {% for msg in get_flashed_messages() %}
