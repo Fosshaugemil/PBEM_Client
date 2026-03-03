@@ -1,0 +1,6 @@
+*.db
+savegames/
+__pycache__/
+*.pyc
+.pbem_client.json
+*.sav
