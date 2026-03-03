@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ lobby.name }} — PBEM Server{% endblock %}
 {% block content %}
+<script>
+var SESSION_UID = {{ session['user_id'] }};
+var MSG_URL  = "{{ url_for('lobby.get_messages', lobby_id=lobby.id) }}";
+var CHAT_URL = "{{ url_for('lobby.post_chat',    lobby_id=lobby.id) }}";
+var NOTE_URL = "{{ url_for('lobby.save_note',    lobby_id=lobby.id) }}";
+var EDIT_URL = "{{ url_for('lobby.edit',         lobby_id=lobby.id) }}";
+</script>
 
 <!-- Header -->
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem">
@@ -91,7 +98,7 @@
     <!-- Players -->
     <div class="card">
       <h3 style="margin-top:0;color:#e0e0e0">
-        Players ({{ lobby.player_count }}/{{ lobby.max_players }})
+        Players ({{ lobby.player_count }}/<span id="lobby-max-display">{{ lobby.max_players }}</span>)
         {% if lobby.is_locked %}<span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;vertical-align:middle;border:1px solid rgba(240,228,0,0.4)">locked</span>{% endif %}
       </h3>
       <ul style="list-style:none;padding:0;margin:0">
@@ -132,21 +139,18 @@
       </form>
 
       <h4 style="margin:1rem 0 0.4rem;font-size:0.85rem;color:#9ca3af">Round Notes</h4>
-      {% if round_notes %}
-        <table style="margin-bottom:0.6rem;font-size:0.8rem">
-          <thead><tr><th>Rnd</th><th>Note</th></tr></thead>
-          <tbody>
-            {% for rn in round_notes %}
-            <tr>
-              <td style="text-align:center;white-space:nowrap;color:#a855f7">{{ rn.round_number }}</td>
-              <td style="white-space:pre-wrap;word-break:break-word">{{ rn.content }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p style="color:#4b5563;font-size:0.8rem;margin:0 0 0.6rem">No round notes yet.</p>
-      {% endif %}
+      <table id="round-notes-table" style="margin-bottom:0.6rem;font-size:0.8rem"{% if not round_notes %} hidden{% endif %}>
+        <thead><tr><th>Rnd</th><th>Note</th></tr></thead>
+        <tbody id="round-notes-tbody">
+          {% for rn in round_notes %}
+          <tr data-round="{{ rn.round_number }}">
+            <td style="text-align:center;white-space:nowrap;color:#a855f7">{{ rn.round_number }}</td>
+            <td style="white-space:pre-wrap;word-break:break-word">{{ rn.content }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p id="round-notes-empty" style="color:#4b5563;font-size:0.8rem;margin:0 0 0.6rem"{% if round_notes %} hidden{% endif %}>No round notes yet.</p>
       <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
             style="display:flex;gap:0.4rem;align-items:flex-end">
         <div>
@@ -224,17 +228,19 @@
     <h3 style="margin:0 0 0.75rem;font-size:1rem;color:#e0e0e0">Lobby Chat</h3>
 
     <!-- Message list -->
-    <div id="chat-log" style="height:420px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+    <div id="chat-log"
+         data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
+         style="height:420px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
       {% if chat_messages %}
         {% for msg in chat_messages %}
-          <div style="font-size:0.88rem;line-height:1.4">
+          <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
             <span style="font-weight:600;color:{% if msg.user_id == session['user_id'] %}#f0e400{% else %}#a855f7{% endif %}">{{ msg.user.username }}</span>
             <span style="color:#4b5563;font-size:0.75rem;margin-left:0.3rem">{{ msg.created_at.strftime('%H:%M') }}</span>
             <div style="margin-top:0.1rem;word-break:break-word;color:#c0c0d0">{{ msg.content }}</div>
           </div>
         {% endfor %}
       {% else %}
-        <p style="color:#4b5563;font-size:0.85rem;margin:auto;text-align:center">No messages yet. Say hello!</p>
+        <p id="chat-empty" style="color:#4b5563;font-size:0.85rem;margin:auto;text-align:center">No messages yet. Say hello!</p>
       {% endif %}
     </div>
 
@@ -251,28 +257,155 @@
 </div>
 
 <script>
-var log = document.getElementById('chat-log');
-if (log) log.scrollTop = log.scrollHeight;
-
-var uploadForm = document.getElementById('upload-form');
-if (uploadForm) {
-    uploadForm.addEventListener('submit', function(e) {
-        var file = document.getElementById('savegame').files[0];
-        if (file && file.size > 64 * 1024 * 1024) {
-            e.preventDefault();
-            alert('File exceeds the 64 MB limit.');
-        }
-    });
+// ── Utilities ──────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+function showFeedback(btn, msg, isErr) {
+  var old=btn.parentNode.querySelector('.fb'); if(old) old.remove();
+  var s=document.createElement('span'); s.className='fb';
+  s.textContent=' '+msg;
+  s.style.cssText='font-size:0.8rem;margin-left:0.5rem;color:'+(isErr?'#ef4444':'#00ff41');
+  btn.parentNode.insertBefore(s, btn.nextSibling);
+  setTimeout(function(){ s.style.opacity='0'; setTimeout(function(){s.remove();},400); }, 2500);
+}
+function ajaxPost(url, fd, cb) {
+  fetch(url,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd,credentials:'same-origin'})
+    .then(function(r){return r.json();}).then(cb)
+    .catch(function(){cb({ok:false,error:'Network error'});});
 }
 
+// ── Chat ───────────────────────────────────────────────────────────────────
+var log       = document.getElementById('chat-log');
+var chatForm  = document.querySelector('form[action="'+CHAT_URL+'"]');
 var chatInput = document.getElementById('chat-input');
-if (chatInput) {
-    chatInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            this.closest('form').submit();
-        }
+var latestTs  = log ? (log.dataset.latestTs||'') : '';
+var seenIds   = {};
+
+if (log) {
+  log.querySelectorAll('[data-msg-id]').forEach(function(el){ seenIds[el.dataset.msgId]=true; });
+  log.scrollTop = log.scrollHeight;
+}
+
+function buildMsg(m) {
+  var d=document.createElement('div');
+  d.style.cssText='font-size:0.88rem;line-height:1.4';
+  d.dataset.msgId=m.id;
+  var col=m.user_id===SESSION_UID?'#f0e400':'#a855f7';
+  d.innerHTML=
+    '<span style="font-weight:600;color:'+col+'">'+escHtml(m.username)+'</span>'+
+    '<span style="color:#4b5563;font-size:0.75rem;margin-left:0.3rem">'+fmtTime(m.created_at)+'</span>'+
+    '<div style="margin-top:0.1rem;word-break:break-word;color:#c0c0d0">'+escHtml(m.content)+'</div>';
+  return d;
+}
+function appendMsg(m) {
+  var near=log.scrollHeight-log.scrollTop-log.clientHeight<50;
+  var emp=document.getElementById('chat-empty'); if(emp) emp.remove();
+  log.appendChild(buildMsg(m));
+  if(near) log.scrollTop=log.scrollHeight;
+}
+
+if (chatForm) {
+  chatForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var content=chatInput.value.trim(); if(!content) return;
+    var fd=new FormData(chatForm);
+    chatInput.value=''; chatInput.disabled=true;
+    ajaxPost(CHAT_URL, fd, function(data){
+      chatInput.disabled=false; chatInput.focus();
+      if(data.ok && data.message){
+        seenIds[data.message.id]=true; latestTs=data.message.created_at;
+        appendMsg(data.message);
+      }
     });
+  });
+  chatInput.addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();chatForm.requestSubmit();}
+  });
+}
+
+// Polling
+var pollInFlight=false;
+function poll(){
+  if(pollInFlight||!log||document.visibilityState==='hidden') return;
+  pollInFlight=true;
+  fetch(MSG_URL+(latestTs?'?after='+encodeURIComponent(latestTs):''),
+    {headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      (data.messages||[]).forEach(function(m){
+        if(seenIds[m.id]) return;
+        seenIds[m.id]=true; latestTs=m.created_at; appendMsg(m);
+      });
+    }).catch(function(){}).finally(function(){pollInFlight=false;});
+}
+var pollTimer=setInterval(poll,4000);
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'){ clearInterval(pollTimer); pollTimer=null; }
+  else { poll(); pollTimer=setInterval(poll,4000); }
+});
+
+// ── Notes ──────────────────────────────────────────────────────────────────
+var noteTable=document.getElementById('round-notes-table');
+var noteTbody=document.getElementById('round-notes-tbody');
+var noteEmpty=document.getElementById('round-notes-empty');
+
+document.querySelectorAll('form[action="'+NOTE_URL+'"]').forEach(function(form){
+  form.addEventListener('submit',function(e){
+    e.preventDefault();
+    var btn=form.querySelector('[type=submit]');
+    ajaxPost(NOTE_URL, new FormData(form), function(data){
+      if(!data.ok){ showFeedback(btn,'Error: '+(data.error||'failed'),true); return; }
+      showFeedback(btn,'Saved \u2713',false);
+      if(data.round_number!==null && data.round_number!==undefined){
+        var existing=noteTbody?noteTbody.querySelector('[data-round="'+data.round_number+'"]'):null;
+        if(existing){
+          existing.querySelectorAll('td')[1].textContent=data.content;
+        } else {
+          var tr=document.createElement('tr'); tr.dataset.round=data.round_number;
+          tr.innerHTML=
+            '<td style="text-align:center;white-space:nowrap;color:#a855f7">'+data.round_number+'</td>'+
+            '<td style="white-space:pre-wrap;word-break:break-word">'+escHtml(data.content)+'</td>';
+          if(noteTbody){
+            noteTbody.insertBefore(tr,noteTbody.firstChild);
+            var rows=noteTbody.querySelectorAll('tr');
+            if(rows.length>5) noteTbody.removeChild(rows[rows.length-1]);
+          }
+          if(noteTable) noteTable.removeAttribute('hidden');
+          if(noteEmpty) noteEmpty.setAttribute('hidden','');
+        }
+        var ri=form.querySelector('[name=round_number]'); if(ri) ri.value='';
+        var ci=form.querySelector('[name=content]');     if(ci) ci.value='';
+      }
+    });
+  });
+});
+
+// ── Edit max_players ────────────────────────────────────────────────────────
+var editForm=document.querySelector('form[action="'+EDIT_URL+'"]');
+if(editForm){
+  editForm.addEventListener('submit',function(e){
+    e.preventDefault();
+    var btn=editForm.querySelector('[type=submit]');
+    ajaxPost(EDIT_URL, new FormData(editForm), function(data){
+      if(!data.ok){ showFeedback(btn,'Error: '+(data.error||'failed'),true); return; }
+      showFeedback(btn,'Updated \u2713',false);
+      var span=document.getElementById('lobby-max-display');
+      if(span) span.textContent=data.max_players;
+    });
+  });
+}
+
+// ── Upload file-size check ──────────────────────────────────────────────────
+var uploadForm=document.getElementById('upload-form');
+if(uploadForm){
+  uploadForm.addEventListener('submit',function(e){
+    var file=document.getElementById('savegame').files[0];
+    if(file&&file.size>64*1024*1024){e.preventDefault();alert('File exceeds 64 MB limit.');}
+  });
 }
 </script>
 {% endblock %}

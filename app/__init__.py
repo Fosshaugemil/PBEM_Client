@@ -23,6 +23,7 @@ def login_required(f):
 def set_sqlite_pragma(dbapi_conn, _):
     if isinstance(dbapi_conn, sqlite3.Connection):
         dbapi_conn.execute('PRAGMA foreign_keys=ON')
+        dbapi_conn.execute('PRAGMA journal_mode=WAL')
 
 
 def create_app(config_object='app.config.Config'):

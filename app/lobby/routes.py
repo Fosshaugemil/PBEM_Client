@@ -1,6 +1,6 @@
 import os
 
-from flask import Blueprint, render_template, request, redirect, url_for, session, flash, abort, current_app
+from flask import Blueprint, render_template, request, redirect, url_for, session, flash, abort, current_app, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from datetime import datetime
@@ -142,10 +142,13 @@ def leave(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/edit', methods=['POST'])
 @login_required
 def edit(lobby_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     lobby = Lobby.query.get_or_404(lobby_id)
     if lobby.owner_id != session['user_id']:
         abort(403)
     if lobby.is_locked:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Unlock the lobby before changing player limit.'}), 400
         flash('Unlock the lobby before changing player limit.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
     try:
@@ -153,13 +156,19 @@ def edit(lobby_id):
         if new_max < 2:
             raise ValueError
     except ValueError:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Player limit must be a number >= 2.'}), 400
         flash('Player limit must be a number >= 2.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
     if new_max < lobby.player_count:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': f'Cannot set limit below current player count ({lobby.player_count}).'}), 400
         flash(f'Cannot set limit below current player count ({lobby.player_count}).')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
     lobby.max_players = new_max
     db.session.commit()
+    if is_ajax:
+        return jsonify({'ok': True, 'max_players': lobby.max_players})
     flash('Player limit updated.')
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
@@ -195,6 +204,7 @@ def lock(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/note', methods=['POST'])
 @login_required
 def save_note(lobby_id):
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if not _is_member(lobby_id, session['user_id']):
         abort(403)
     content = request.form.get('content', '').strip()
@@ -206,21 +216,28 @@ def save_note(lobby_id):
             if round_number < 1:
                 raise ValueError
         except ValueError:
+            if is_ajax:
+                return jsonify({'ok': False, 'error': 'Round number must be a positive integer.'}), 400
             flash('Round number must be a positive integer.')
             return redirect(url_for('lobby.detail', lobby_id=lobby_id))
     if not content:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'Note cannot be empty.'}), 400
         flash('Note cannot be empty.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
-    note = PlayerNote.query.filter_by(
+    existing = PlayerNote.query.filter_by(
         user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number).first()
-    if note:
-        note.content = content
-        note.updated_at = datetime.utcnow()
+    is_new = existing is None
+    if existing:
+        existing.content = content
+        existing.updated_at = datetime.utcnow()
     else:
-        note = PlayerNote(user_id=session['user_id'], lobby_id=lobby_id,
-                          round_number=round_number, content=content)
-        db.session.add(note)
+        db.session.add(PlayerNote(user_id=session['user_id'], lobby_id=lobby_id,
+                                  round_number=round_number, content=content))
     db.session.commit()
+    if is_ajax:
+        return jsonify({'ok': True, 'is_new': is_new,
+                        'round_number': round_number, 'content': content})
     flash('Note saved.')
     return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
@@ -231,11 +248,39 @@ def post_chat(lobby_id):
     if not _is_member(lobby_id, session['user_id']):
         abort(403)
     content = request.form.get('content', '').strip()[:1000]
-    if content:
-        msg = ChatMessage(lobby_id=lobby_id, user_id=session['user_id'], content=content)
-        db.session.add(msg)
-        db.session.commit()
+    if not content:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'error': 'empty'}), 400
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id, _anchor='chat'))
+    msg = ChatMessage(lobby_id=lobby_id, user_id=session['user_id'], content=content)
+    db.session.add(msg)
+    db.session.commit()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'message': {
+            'id': msg.id, 'user_id': msg.user_id, 'username': msg.user.username,
+            'content': msg.content, 'created_at': msg.created_at.isoformat() + 'Z',
+        }})
     return redirect(url_for('lobby.detail', lobby_id=lobby_id, _anchor='chat'))
+
+
+@lobby_bp.route('/<int:lobby_id>/messages')
+@login_required
+def get_messages(lobby_id):
+    if not _is_member(lobby_id, session['user_id']):
+        abort(403)
+    after_str = request.args.get('after', '').rstrip('Z').split('+')[0]
+    query = (ChatMessage.query
+             .filter_by(lobby_id=lobby_id)
+             .order_by(ChatMessage.created_at.asc()))
+    if after_str:
+        try:
+            query = query.filter(ChatMessage.created_at > datetime.fromisoformat(after_str))
+        except ValueError:
+            pass
+    return jsonify({'messages': [{
+        'id': m.id, 'user_id': m.user_id, 'username': m.user.username,
+        'content': m.content, 'created_at': m.created_at.isoformat() + 'Z',
+    } for m in query.limit(50).all()]})
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
