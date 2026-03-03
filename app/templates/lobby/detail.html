@@ -142,46 +142,6 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
       </form>
     </div>
 
-    <!-- Round Notes -->
-    <div class="card">
-      <h3 style="margin-top:0;font-size:1rem;color:#e0e0e0">
-        Round Notes
-        <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
-      </h3>
-      <div style="max-height:320px;overflow:hidden;margin-bottom:0.75rem">
-        <table id="round-notes-table" style="font-size:0.85rem;width:100%"{% if not round_notes %} hidden{% endif %}>
-          <thead><tr><th>Rnd</th><th>Note</th><th style="width:1.8rem"></th></tr></thead>
-          <tbody id="round-notes-tbody">
-            {% for rn in round_notes %}
-            <tr data-round="{{ rn.round_number }}">
-              <td style="text-align:center;white-space:nowrap;color:#a855f7;font-size:0.9rem">{{ rn.round_number }}</td>
-              <td style="white-space:pre-wrap;word-break:break-word">{{ rn.content }}</td>
-              <td>
-                <button class="rn-del-btn" data-round="{{ rn.round_number }}"
-                        style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:0.85rem;padding:0.1rem 0.3rem;line-height:1"
-                        title="Delete note">&#x2715;</button>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <p id="round-notes-empty" style="color:#4b5563;font-size:0.85rem;margin:0"{% if round_notes %} hidden{% endif %}>No round notes yet.</p>
-      </div>
-      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
-            style="display:flex;gap:0.4rem;align-items:flex-end">
-        <div>
-          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Rnd #</label>
-          <input type="number" name="round_number" min="1" required style="width:4.5rem;margin-bottom:0" placeholder="1"
-                 value="{{ lobby.current_round if lobby.is_locked else '' }}">
-        </div>
-        <div style="flex:1">
-          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Note</label>
-          <input type="text" name="content" placeholder="What happened?" style="margin-bottom:0">
-        </div>
-        <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.6rem;white-space:nowrap">Save</button>
-      </form>
-    </div>
-
   </div>
 
   <!-- CENTER: Savegames + Upload -->
@@ -220,6 +180,46 @@ var DELETE_NOTE_URL = "{{ url_for('lobby.delete_note',  lobby_id=lobby.id) }}";
         <p id="savegames-empty" style="color:#4b5563;font-size:0.9rem;margin:0">No savegames yet.</p>
       {% endif %}
       </div><!-- /savegames-container -->
+    </div>
+
+    <!-- Round Notes -->
+    <div class="card">
+      <h3 style="margin-top:0;font-size:1rem;color:#e0e0e0">
+        Round Notes
+        <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
+      </h3>
+      <div style="max-height:160px;overflow-y:auto;margin-bottom:0.75rem">
+        <table id="round-notes-table" style="font-size:0.85rem;width:100%"{% if not round_notes %} hidden{% endif %}>
+          <thead><tr><th>Rnd</th><th>Note</th><th style="width:1.8rem"></th></tr></thead>
+          <tbody id="round-notes-tbody">
+            {% for rn in round_notes %}
+            <tr data-round="{{ rn.round_number }}">
+              <td style="text-align:center;white-space:nowrap;color:#a855f7;font-size:0.9rem">{{ rn.round_number }}</td>
+              <td style="white-space:pre-wrap;word-break:break-word">{{ rn.content }}</td>
+              <td>
+                <button class="rn-del-btn" data-round="{{ rn.round_number }}"
+                        style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:0.85rem;padding:0.1rem 0.3rem;line-height:1"
+                        title="Delete note">&#x2715;</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p id="round-notes-empty" style="color:#4b5563;font-size:0.85rem;margin:0"{% if round_notes %} hidden{% endif %}>No round notes yet.</p>
+      </div>
+      <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
+            style="display:flex;gap:0.4rem;align-items:flex-end">
+        <div>
+          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Rnd #</label>
+          <input type="number" name="round_number" min="1" required style="width:4.5rem;margin-bottom:0" placeholder="1"
+                 value="{{ lobby.current_round if lobby.is_locked else '' }}">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Note</label>
+          <input type="text" name="content" placeholder="What happened?" style="margin-bottom:0">
+        </div>
+        <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;padding:0.3rem 0.6rem;white-space:nowrap">Save</button>
+      </form>
     </div>
 
     <div class="card" id="upload-card">
