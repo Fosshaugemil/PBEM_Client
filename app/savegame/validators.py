@@ -73,13 +73,13 @@ def _ext(filename):
 #   • First 4 bytes are not all-zero (empty/corrupt file guard)
 
 _SE_MIN_SIZE = 4 * 1024       # 4 KB
-_SE_ALLOWED_EXTS = {'.sav'}
+_SE_ALLOWED_EXTS = {'.se1'}
 
 
 def validate_shadow_empire(f, filename, size):
     if _ext(filename) not in _SE_ALLOWED_EXTS:
         return False, (
-            f'Shadow Empire saves must use the .sav extension '
+            f'Shadow Empire saves must use the .se1 extension '
             f'(uploaded file has {_ext(filename)!r}).'
         )
     if size < _SE_MIN_SIZE:
