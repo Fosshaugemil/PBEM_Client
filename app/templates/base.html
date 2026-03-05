@@ -123,6 +123,7 @@
       background: rgba(240,228,0,0.08); border: 1px solid #f0e400;
       color: #f0e400;
       box-shadow: 0 0 10px rgba(240,228,0,0.2);
+      transition: opacity 0.5s ease;
     }
 
     /* ── Card ── */
@@ -372,6 +373,14 @@
   {% for msg in get_flashed_messages() %}
     <div class="flash">{{ msg }}</div>
   {% endfor %}
+  <script>
+  document.querySelectorAll('.flash').forEach(function(el) {
+    setTimeout(function() {
+      el.style.opacity = '0';
+      setTimeout(function() { el.remove(); }, 500);
+    }, 4000);
+  });
+  </script>
 
   {% block content %}{% endblock %}
   <script>
