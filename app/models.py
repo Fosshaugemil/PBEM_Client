@@ -18,6 +18,7 @@ class Lobby(db.Model):
     description = db.Column(db.String(512), default='')
     password_hash = db.Column(db.String(256), nullable=True)  # NULL = public
     max_players = db.Column(db.Integer, default=4)
+    game_type = db.Column(db.String(64), nullable=False, default='shadow_empire')
     is_locked = db.Column(db.Boolean, default=False, nullable=False)
     is_archived = db.Column(db.Boolean, default=False, nullable=False)
     current_player_idx = db.Column(db.Integer, default=0, nullable=False)

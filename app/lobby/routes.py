@@ -35,6 +35,7 @@ def create():
         description = request.form.get('description', '').strip()
         max_players = request.form.get('max_players', '4')
         password = request.form.get('password', '')
+        game_type = request.form.get('game_type', 'shadow_empire')
 
         if not name:
             flash('Lobby name is required.')
@@ -48,9 +49,14 @@ def create():
             flash('Max players must be a number >= 2.')
             return render_template('lobby/create.html')
 
+        from ..savegame.validators import GAME_VALIDATORS
+        if game_type not in GAME_VALIDATORS:
+            game_type = 'shadow_empire'
+
         lobby = Lobby(
             name=name,
             description=description,
+            game_type=game_type,
             max_players=max_players,
             owner_id=session['user_id'],
             password_hash=generate_password_hash(password) if password else None,

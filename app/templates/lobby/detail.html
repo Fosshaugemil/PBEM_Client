@@ -30,7 +30,10 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
         <span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(240,228,0,0.5);margin-left:0.4rem">&#128274; In Progress</span>
       {% endif %}
     </h2>
-    {% if lobby.description %}<p style="color:#6b7280;margin:0">{{ lobby.description }}</p>{% endif %}
+    <p style="color:#4b5563;font-size:0.8rem;margin:0.2rem 0 0">
+      {%- if lobby.game_type == 'shadow_empire' %}Shadow Empire{%- else %}{{ lobby.game_type }}{%- endif %}
+    </p>
+    {% if lobby.description %}<p style="color:#6b7280;margin:0.15rem 0 0">{{ lobby.description }}</p>{% endif %}
   </div>
   <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
     {% if lobby.owner_id == session['user_id'] %}

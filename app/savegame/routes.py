@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 
 from .. import db, login_required
 from ..models import Lobby, LobbyMember, SavegameFile
+from .validators import validate_savegame
 
 savegame_bp = Blueprint('savegame', __name__)
 
@@ -53,6 +54,13 @@ def upload(lobby_id):
         if is_ajax:
             return jsonify({'ok': False, 'error': 'Invalid filename.'}), 400
         flash('Invalid filename.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
+    ok, err = validate_savegame(f, lobby.game_type)
+    if not ok:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': err}), 400
+        flash(err)
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
     stored_name = f"{uuid.uuid4().hex}_{safe_name}"
