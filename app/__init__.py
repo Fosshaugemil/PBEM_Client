@@ -4,10 +4,13 @@ from functools import wraps
 
 from flask import Flask, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import event
+from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import event, select
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import joinedload
 
 db = SQLAlchemy()
+csrf = CSRFProtect()
 
 
 def login_required(f):
@@ -31,6 +34,7 @@ def create_app(config_object='app.config.Config'):
     app.config.from_object(config_object)
 
     db.init_app(app)
+    csrf.init_app(app)
 
     with app.app_context():
         from . import models  # noqa: F401 — ensure models are registered before create_all
@@ -49,8 +53,12 @@ def create_app(config_object='app.config.Config'):
     def inject_lobby_ribbon():
         if 'user_id' not in session:
             return {}
-        from .models import LobbyMember
-        memberships = LobbyMember.query.filter_by(user_id=session['user_id']).all()
+        from .models import Lobby, LobbyMember
+        memberships = db.session.execute(
+            select(LobbyMember)
+            .filter_by(user_id=session['user_id'])
+            .options(joinedload(LobbyMember.lobby).joinedload(Lobby.members))
+        ).scalars().all()
         ribbon = []
         for m in memberships:
             lob = m.lobby

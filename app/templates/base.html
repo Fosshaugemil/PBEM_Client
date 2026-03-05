@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}PBEM Server{% endblock %}</title>
+  <title>{% block title %}STRAT//COM{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
 
@@ -202,6 +203,7 @@
       <a href="{{ url_for('lobby.list_lobbies') }}">Lobbies</a>
       <span style="color:#6b7280">{{ session.get('username') }}</span>
       <form action="{{ url_for('auth.logout') }}" method="post" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-secondary" type="submit">Logout</button>
       </form>
     {% else %}

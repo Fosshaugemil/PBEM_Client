@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Lobbies — PBEM Server{% endblock %}
+{% block title %}Lobbies — STRAT//COM{% endblock %}
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
   <h2 style="margin:0">Game Lobbies</h2>
@@ -53,6 +53,7 @@
                 <input type="password" name="password" placeholder="Lobby password"
                        style="width:140px;display:inline;margin:0 0.5rem 0 0">
               {% endif %}
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-primary">Join</button>
             </form>
           {% endif %}
