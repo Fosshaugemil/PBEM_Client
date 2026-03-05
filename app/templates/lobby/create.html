@@ -15,7 +15,7 @@
     <input type="number" id="max_players" name="max_players" value="4" min="2" max="32">
 
     <label for="game_type">Game Type</label>
-    <select id="game_type" name="game_type" style="margin-bottom:0.75rem">
+    <select id="game_type" name="game_type" required style="margin-bottom:0.75rem">
       <option value="">— Select game —</option>
       {% for key, label in game_display_names.items() %}
         <option value="{{ key }}">{{ label }}</option>

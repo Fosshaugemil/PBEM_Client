@@ -53,8 +53,9 @@ def create():
         max_players = request.form.get('max_players', '4')
         password = request.form.get('password', '')
         game_type = request.form.get('game_type', '').strip() or None
-        if game_type and game_type not in GAME_VALIDATORS:
-            game_type = None
+        if not game_type or game_type not in GAME_VALIDATORS:
+            flash('Please select a valid game type.')
+            return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
         if not name:
             flash('Lobby name is required.')
