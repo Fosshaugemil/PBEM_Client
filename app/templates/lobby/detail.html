@@ -102,8 +102,12 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       &#9654; IT'S YOUR TURN — Round {{ lobby.current_round }}
     </div>
   {% else %}
+    {% set latest_sg = (lobby.savegames | sort(attribute='uploaded_at') | last) if lobby.savegames else none %}
     <div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">
       Round {{ lobby.current_round }} — Waiting for <strong style="color:#a855f7">{{ lobby.current_member.user.username if lobby.current_member else '?' }}</strong>…
+      {% if latest_sg %}
+        <span id="turn-elapsed" data-ts="{{ latest_sg.uploaded_at.isoformat() }}Z" style="font-size:0.8rem;margin-left:0.5rem;opacity:0.6"></span>
+      {% endif %}
     </div>
   {% endif %}
 {% endif %}
@@ -323,11 +327,21 @@ function fmtTime(iso) {
 }
 // Convert server-rendered UTC timestamps to local military time
 document.querySelectorAll('[data-ts]').forEach(function(el){ el.textContent = fmtTime(el.dataset.ts); });
-function renderTurnBanner(isMyTurn, round, username) {
+function fmtElapsed(isoTs) {
+  var secs = Math.floor((Date.now() - new Date(isoTs)) / 1000);
+  if (secs < 60)   return secs + 's';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm';
+  var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+}
+function renderTurnBanner(isMyTurn, round, username, turnStartedAt) {
   if (isMyTurn) {
     return '<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round ' + round + '</div>';
   }
-  return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round ' + round + ' \u2014 Waiting for <strong style="color:#a855f7">' + escHtml(username || '?') + '</strong>\u2026</div>';
+  var elapsedHtml = turnStartedAt
+    ? ' <span id="turn-elapsed" data-ts="' + escHtml(turnStartedAt) + '" style="font-size:0.8rem;margin-left:0.5rem;opacity:0.6">(' + fmtElapsed(turnStartedAt) + ')</span>'
+    : '';
+  return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round ' + round + ' \u2014 Waiting for <strong style="color:#a855f7">' + escHtml(username || '?') + '</strong>\u2026' + elapsedHtml + '</div>';
 }
 function showFeedback(btn, msg, isErr) {
   var old=btn.parentNode.querySelector('.fb'); if(old) old.remove();
@@ -396,6 +410,13 @@ function playNotifSound() {
     }
   } catch(e) {}
 }
+
+// ── Elapsed-time ticker for the "waiting for" banner ────────────────────────
+setInterval(function() {
+  var el = document.getElementById('turn-elapsed');
+  if (!el || !el.dataset.ts) return;
+  el.textContent = '(' + fmtElapsed(el.dataset.ts) + ')';
+}, 1000);
 
 // ── State polling setup ─────────────────────────────────────────────────────
 var knownSgIds = new Set();
@@ -497,7 +518,7 @@ function pollState() {
         // Update turn banner
         var turnC = document.getElementById('turn-banner-container');
         if (turnC) {
-          turnC.innerHTML = renderTurnBanner(nowMyTurn, data.current_round, data.current_player_username);
+          turnC.innerHTML = renderTurnBanner(nowMyTurn, data.current_round, data.current_player_username, data.turn_started_at);
         }
 
         // Update player list highlights
@@ -654,7 +675,7 @@ if(uploadForm){
       // 1. Update turn banner
       var turnC=document.getElementById('turn-banner-container');
       if(turnC){
-        turnC.innerHTML=renderTurnBanner(data.is_my_turn_now, data.current_round, data.current_player_username);
+        turnC.innerHTML=renderTurnBanner(data.is_my_turn_now, data.current_round, data.current_player_username, data.turn_started_at);
       }
 
       // 2. Swap upload section

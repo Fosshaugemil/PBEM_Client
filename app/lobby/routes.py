@@ -364,11 +364,13 @@ def get_state(lobby_id):
         select(SavegameFile).filter_by(lobby_id=lobby_id)
         .order_by(SavegameFile.uploaded_at.desc())
     ).scalars().all()
+    turn_started_at = savegames[0].uploaded_at.isoformat() + 'Z' if savegames else None
     return jsonify({
         'current_round': lobby.current_round,
         'is_locked': lobby.is_locked,
         'max_players': lobby.max_players,
         'member_count': lobby.player_count,
+        'turn_started_at': turn_started_at,
         'current_player_user_id': cur.user_id if cur else None,
         'current_player_username': cur.user.username if cur else None,
         'savegames': [{
@@ -453,10 +455,18 @@ def list_state():
         stmt = stmt.where(Lobby.id.in_(user_lobby_ids))
     return jsonify({'lobbies': [{
         'id': lob.id,
+        'name': lob.name,
+        'description': lob.description or '',
+        'game_display_name': GAME_DISPLAY_NAMES.get(lob.game_type, '—') if lob.game_type else '—',
+        'is_password_protected': lob.is_password_protected,
+        'owner_username': lob.owner.username,
         'player_count': lob.player_count,
         'max_players': lob.max_players,
         'is_locked': lob.is_locked,
         'is_archived': lob.is_archived,
+        'is_member': lob.id in user_lobby_ids,
+        'join_url': url_for('lobby.join', lobby_id=lob.id),
+        'detail_url': url_for('lobby.detail', lobby_id=lob.id),
     } for lob in db.session.execute(stmt).scalars().all()]})
 
 

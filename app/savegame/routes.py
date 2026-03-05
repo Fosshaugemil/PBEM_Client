@@ -130,6 +130,7 @@ def upload(lobby_id):
             'current_player_username': new_member.user.username if new_member else None,
             'current_player_user_id': new_member.user_id if new_member else None,
             'is_my_turn_now': new_member is not None and new_member.user_id == session['user_id'],
+            'turn_started_at': sg.uploaded_at.isoformat() + 'Z',
             'savegame': {
                 'id': sg.id,
                 'original_name': sg.original_name,
