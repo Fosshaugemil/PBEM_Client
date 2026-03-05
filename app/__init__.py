@@ -58,7 +58,7 @@ def create_app(config_object='app.config.Config'):
             select(LobbyMember)
             .filter_by(user_id=session['user_id'])
             .options(joinedload(LobbyMember.lobby).joinedload(Lobby.members))
-        ).scalars().all()
+        ).unique().scalars().all()
         ribbon = []
         for m in memberships:
             lob = m.lobby
