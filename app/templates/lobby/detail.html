@@ -404,6 +404,7 @@ document.querySelectorAll('#savegames-tbody tr[data-sg-id]').forEach(function(tr
 });
 var lastKnownPlayerId = {{ (lobby.current_member.user_id if lobby.current_member else none)|tojson }};
 var wasMyTurn = {{ (lobby.is_locked and lobby.current_member is not none and lobby.current_member.user_id == session['user_id'])|tojson }};
+var knownMemberCount = {{ lobby.player_count }};
 var stateInFlight = false;
 
 function buildSgRow(sg) {
@@ -530,6 +531,19 @@ function pollState() {
           while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
           tbody.appendChild(buildSgRow(latestSg));
         }
+      }
+
+      // Keep max_players display in sync (owner may have changed it)
+      if (data.max_players !== undefined) {
+        var maxSpan = document.getElementById('lobby-max-display');
+        if (maxSpan && maxSpan.textContent !== String(data.max_players)) {
+          maxSpan.textContent = data.max_players;
+        }
+      }
+
+      // Reload if players join/leave while lobby is still in waiting state
+      if (!data.is_locked && data.member_count !== undefined && data.member_count !== knownMemberCount) {
+        window.location.reload();
       }
     })
     .catch(function(){})

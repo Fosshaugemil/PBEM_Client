@@ -37,7 +37,10 @@
     </thead>
     <tbody>
     {% for lobby in lobbies %}
-      <tr>
+      <tr data-lobby-id="{{ lobby.id }}"
+          data-is-member="{{ 'true' if lobby.id in user_lobby_ids else 'false' }}"
+          data-is-locked="{{ 'true' if lobby.is_locked else 'false' }}"
+          data-is-archived="{{ 'true' if lobby.is_archived else 'false' }}">
         <td>
           {{ lobby.name }}
           {% if lobby.is_password_protected %}<span class="lock" title="Password protected">&#128274;</span>{% endif %}
@@ -46,8 +49,8 @@
         <td style="font-size:0.85rem;color:#a855f7">
           {{ game_display_names.get(lobby.game_type, '—') if lobby.game_type else '—' }}
         </td>
-        <td>{{ lobby.player_count }} / {{ lobby.max_players }}</td>
-        <td>
+        <td data-col="players">{{ lobby.player_count }} / {{ lobby.max_players }}</td>
+        <td data-col="status">
           {% if lobby.is_archived %}
             <span style="background:rgba(107,114,128,0.2);color:#9ca3af;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid #4b5563">Archived</span>
           {% elif lobby.is_locked %}
@@ -57,7 +60,7 @@
           {% endif %}
         </td>
         <td style="font-size:0.9rem">{{ lobby.owner.username }}</td>
-        <td style="text-align:right">
+        <td style="text-align:right" data-col="action">
           {% if lobby.id in user_lobby_ids %}
             <a href="{{ url_for('lobby.detail', lobby_id=lobby.id) }}" class="btn btn-primary">View</a>
           {% elif lobby.is_archived %}
@@ -91,5 +94,64 @@
     <p style="color:#6b7280">No lobbies yet. Create the first one!</p>
   {% endif %}
 {% endif %}
+
+<script>
+(function() {
+  var activeFilter = new URLSearchParams(window.location.search).get('filter') || 'open';
+
+  function statusBadge(l) {
+    if (l.is_archived) {
+      return '<span style="background:rgba(107,114,128,0.2);color:#9ca3af;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid #4b5563">Archived</span>';
+    } else if (l.is_locked) {
+      return '<span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(240,228,0,0.5)">&#128274; In Progress</span>';
+    }
+    return '<span style="background:rgba(0,255,65,0.08);color:#00ff41;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.5)">Open</span>';
+  }
+
+  var _inFlight = false;
+  setInterval(function() {
+    if (_inFlight || document.visibilityState === 'hidden') return;
+    _inFlight = true;
+    fetch('/lobbies/list-state?filter=' + encodeURIComponent(activeFilter), {
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+      credentials: 'same-origin'
+    })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      if (!data || !data.lobbies) return;
+      data.lobbies.forEach(function(l) {
+        var row = document.querySelector('tr[data-lobby-id="' + l.id + '"]');
+        if (!row) return;
+
+        // Player count
+        var playerCell = row.querySelector('[data-col=players]');
+        if (playerCell) playerCell.textContent = l.player_count + ' / ' + l.max_players;
+
+        // Status badge
+        var statusCell = row.querySelector('[data-col=status]');
+        if (statusCell) statusCell.innerHTML = statusBadge(l);
+
+        // Action cell: if newly locked and not a member, swap button to "Locked"
+        var isMember = row.dataset.isMember === 'true';
+        var wasLocked = row.dataset.isLocked === 'true';
+        if (!isMember && !wasLocked && l.is_locked) {
+          var actionCell = row.querySelector('[data-col=action]');
+          if (actionCell) actionCell.innerHTML = '<span style="color:#4b5563;font-size:0.9rem">Locked</span>';
+          row.dataset.isLocked = 'true';
+        }
+        // If newly full, swap Join button to "Full"
+        if (!isMember && !l.is_locked && l.player_count >= l.max_players) {
+          var actionCell = row.querySelector('[data-col=action]');
+          if (actionCell && actionCell.querySelector('form')) {
+            actionCell.innerHTML = '<span style="color:#4b5563;font-size:0.9rem">Full</span>';
+          }
+        }
+      });
+    })
+    .catch(function(){})
+    .finally(function(){ _inFlight = false; });
+  }, 10000);
+})();
+</script>
 
 {% endblock %}

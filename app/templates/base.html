@@ -241,7 +241,7 @@
         {% if item.is_my_turn %}<span>&#9654;</span>{% endif %}
         {{ item.lobby.name }}
         {% if item.lobby.is_locked %}
-          <span style="opacity:0.65;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
+          <span data-round-badge style="opacity:0.65;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
         {% endif %}
         <span class="ribbon-msg-icon" title="Chat">&#128172;</span>
       </a>
@@ -324,10 +324,30 @@
       });
     }
 
+    function refreshTurns(turns) {
+      document.querySelectorAll('#lobby-ribbon .lobby-tab[data-lobby-id]').forEach(function(tab) {
+        var lid = tab.dataset.lobbyId;
+        var t = turns && turns[lid];
+        var isActive = tab.classList.contains('active-page');
+        if (t) {
+          if (t.is_my_turn && !isActive) {
+            tab.classList.add('your-turn');
+          } else if (!t.is_my_turn) {
+            tab.classList.remove('your-turn');
+          }
+          var badge = tab.querySelector('[data-round-badge]');
+          if (badge) badge.textContent = 'R' + t.current_round;
+        } else {
+          // Lobby no longer locked or no turn data — clear turn class
+          tab.classList.remove('your-turn');
+        }
+      });
+    }
+
     // Initial check using server-rendered timestamps
     refreshUnread(null);
 
-    // Poll for new messages in background every 20 s
+    // Poll for chat + turn state in background every 20 s
     var _tsInFlight = false;
     setInterval(function() {
       if (_tsInFlight || document.visibilityState === 'hidden') return;
@@ -338,7 +358,9 @@
       })
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(data) {
-        if (data && data.timestamps) refreshUnread(data.timestamps);
+        if (!data) return;
+        if (data.timestamps) refreshUnread(data.timestamps);
+        if (data.turns)      refreshTurns(data.turns);
       })
       .catch(function(){})
       .finally(function(){ _tsInFlight = false; });

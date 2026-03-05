@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .. import db, login_required
 from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, User
@@ -366,6 +366,9 @@ def get_state(lobby_id):
     ).scalars().all()
     return jsonify({
         'current_round': lobby.current_round,
+        'is_locked': lobby.is_locked,
+        'max_players': lobby.max_players,
+        'member_count': lobby.player_count,
         'current_player_user_id': cur.user_id if cur else None,
         'current_player_username': cur.user.username if cur else None,
         'savegames': [{
@@ -402,28 +405,59 @@ def reorder(lobby_id):
 @lobby_bp.route('/chat-timestamps')
 @login_required
 def chat_timestamps():
-    """Return latest chat message timestamp per lobby for the current user.
+    """Lightweight poll used by the ribbon.
 
-    Used by the ribbon to poll for unread indicators without a full page reload.
-    Response: {"timestamps": {"<lobby_id>": "<iso_ts>Z", ...}}
+    Returns:
+      timestamps  — latest chat message timestamp per lobby
+      turns       — turn state for locked lobbies (is_my_turn, current_round)
     """
-    from sqlalchemy import func
-    from ..models import LobbyMember
     memberships = db.session.execute(
         select(LobbyMember).filter_by(user_id=session['user_id'])
     ).scalars().all()
     lobby_ids = [m.lobby_id for m in memberships]
-    result = {}
+    timestamps = {}
     if lobby_ids:
-        rows = db.session.execute(
+        for lobby_id, latest in db.session.execute(
             select(ChatMessage.lobby_id, func.max(ChatMessage.created_at).label('latest'))
             .where(ChatMessage.lobby_id.in_(lobby_ids))
             .group_by(ChatMessage.lobby_id)
-        ).all()
-        for lobby_id, latest in rows:
+        ).all():
             if latest:
-                result[str(lobby_id)] = latest.isoformat() + 'Z'
-    return jsonify({'timestamps': result})
+                timestamps[str(lobby_id)] = latest.isoformat() + 'Z'
+    turns = {}
+    if lobby_ids:
+        for lob in db.session.execute(
+            select(Lobby).where(Lobby.id.in_(lobby_ids), Lobby.is_locked == True)  # noqa: E712
+        ).scalars().all():
+            cur = lob.current_member
+            if cur:
+                turns[str(lob.id)] = {
+                    'is_my_turn': cur.user_id == session['user_id'],
+                    'current_round': lob.current_round,
+                }
+    return jsonify({'timestamps': timestamps, 'turns': turns})
+
+
+@lobby_bp.route('/list-state')
+@login_required
+def list_state():
+    """Slim lobby data for the list page to poll player counts and status."""
+    filt = request.args.get('filter', 'open')
+    user_lobby_ids = {m.lobby_id for m in db.session.execute(
+        select(LobbyMember).filter_by(user_id=session['user_id'])
+    ).scalars().all()}
+    stmt = select(Lobby).order_by(Lobby.created_at.desc())
+    if filt == 'open':
+        stmt = stmt.where(Lobby.is_locked == False, Lobby.is_archived == False)  # noqa: E712
+    elif filt == 'mine':
+        stmt = stmt.where(Lobby.id.in_(user_lobby_ids))
+    return jsonify({'lobbies': [{
+        'id': lob.id,
+        'player_count': lob.player_count,
+        'max_players': lob.max_players,
+        'is_locked': lob.is_locked,
+        'is_archived': lob.is_archived,
+    } for lob in db.session.execute(stmt).scalars().all()]})
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
