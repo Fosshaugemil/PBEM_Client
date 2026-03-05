@@ -5,7 +5,7 @@ from functools import wraps
 from flask import Flask, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import joinedload
 
@@ -53,12 +53,20 @@ def create_app(config_object='app.config.Config'):
     def inject_lobby_ribbon():
         if 'user_id' not in session:
             return {}
-        from .models import Lobby, LobbyMember
+        from .models import ChatMessage, Lobby, LobbyMember
         memberships = db.session.execute(
             select(LobbyMember)
             .filter_by(user_id=session['user_id'])
             .options(joinedload(LobbyMember.lobby).joinedload(Lobby.members))
         ).unique().scalars().all()
+        lobby_ids = [m.lobby_id for m in memberships]
+        latest_msgs = {}
+        if lobby_ids:
+            latest_msgs = dict(db.session.execute(
+                select(ChatMessage.lobby_id, func.max(ChatMessage.created_at).label('latest'))
+                .where(ChatMessage.lobby_id.in_(lobby_ids))
+                .group_by(ChatMessage.lobby_id)
+            ).all())
         ribbon = []
         for m in memberships:
             lob = m.lobby
@@ -67,7 +75,8 @@ def create_app(config_object='app.config.Config'):
                 and lob.current_member is not None
                 and lob.current_member.user_id == session['user_id']
             )
-            ribbon.append({'lobby': lob, 'is_my_turn': is_my_turn})
+            ribbon.append({'lobby': lob, 'is_my_turn': is_my_turn,
+                           'latest_msg_at': latest_msgs.get(lob.id)})
         ribbon.sort(key=lambda x: x['lobby'].created_at)
         return {'lobby_ribbon': ribbon}
 

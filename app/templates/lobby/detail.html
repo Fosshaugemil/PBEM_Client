@@ -3,6 +3,7 @@
 {% block content %}
 <script>
 var SESSION_UID = {{ session['user_id'] }};
+var LOBBY_ID = {{ lobby.id }};
 var MSG_URL  = "{{ url_for('lobby.get_messages', lobby_id=lobby.id) }}";
 var CHAT_URL = "{{ url_for('lobby.post_chat',    lobby_id=lobby.id) }}";
 var NOTE_URL = "{{ url_for('lobby.save_note',    lobby_id=lobby.id) }}";
@@ -280,7 +281,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
         {% for msg in chat_messages %}
           <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
             <span style="font-weight:600;color:{% if msg.user_id == session['user_id'] %}#f0e400{% else %}#a855f7{% endif %}">{{ msg.user.username }}</span>
-            <span style="color:#4b5563;font-size:0.75rem;margin-left:0.3rem">{{ msg.created_at.strftime('%H:%M') }}</span>
+            <span data-ts="{{ msg.created_at.isoformat() }}Z" style="color:#4b5563;font-size:0.75rem;margin-left:0.3rem">{{ msg.created_at.strftime('%H:%M') }}</span>
             <div style="margin-top:0.1rem;word-break:break-word;color:#c0c0d0">{{ msg.content }}</div>
           </div>
         {% endfor %}
@@ -308,8 +309,10 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false});
 }
+// Convert server-rendered UTC timestamps to local military time
+document.querySelectorAll('[data-ts]').forEach(function(el){ el.textContent = fmtTime(el.dataset.ts); });
 function renderTurnBanner(isMyTurn, round, username) {
   if (isMyTurn) {
     return '<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round ' + round + '</div>';
@@ -341,6 +344,7 @@ var seenIds   = {};
 if (log) {
   log.querySelectorAll('[data-msg-id]').forEach(function(el){ seenIds[el.dataset.msgId]=true; });
   requestAnimationFrame(function(){ log.scrollTop = log.scrollHeight; });
+  try { localStorage.setItem('pbem_seen_' + LOBBY_ID, Date.now()); } catch(e) {}
 }
 
 // ── Chat sound ──────────────────────────────────────────────────────────────
@@ -421,6 +425,7 @@ function appendMsg(m) {
   log.appendChild(buildMsg(m));
   log.scrollTop = log.scrollHeight;
   if (m.user_id !== SESSION_UID) playNotifSound();
+  try { localStorage.setItem('pbem_seen_' + LOBBY_ID, Date.now()); } catch(e) {}
 }
 
 if (chatForm) {
