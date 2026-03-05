@@ -399,6 +399,33 @@ def reorder(lobby_id):
     return jsonify({'ok': True})
 
 
+@lobby_bp.route('/chat-timestamps')
+@login_required
+def chat_timestamps():
+    """Return latest chat message timestamp per lobby for the current user.
+
+    Used by the ribbon to poll for unread indicators without a full page reload.
+    Response: {"timestamps": {"<lobby_id>": "<iso_ts>Z", ...}}
+    """
+    from sqlalchemy import func
+    from ..models import LobbyMember
+    memberships = db.session.execute(
+        select(LobbyMember).filter_by(user_id=session['user_id'])
+    ).scalars().all()
+    lobby_ids = [m.lobby_id for m in memberships]
+    result = {}
+    if lobby_ids:
+        rows = db.session.execute(
+            select(ChatMessage.lobby_id, func.max(ChatMessage.created_at).label('latest'))
+            .where(ChatMessage.lobby_id.in_(lobby_ids))
+            .group_by(ChatMessage.lobby_id)
+        ).all()
+        for lobby_id, latest in rows:
+            if latest:
+                result[str(lobby_id)] = latest.isoformat() + 'Z'
+    return jsonify({'timestamps': result})
+
+
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
 @login_required
 def delete(lobby_id):
