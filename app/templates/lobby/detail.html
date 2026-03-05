@@ -36,6 +36,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
     {% if lobby.owner_id == session['user_id'] %}
       <form method="post" action="{{ url_for('lobby.edit', lobby_id=lobby.id) }}" class="inline"
             style="display:flex;gap:0.4rem;align-items:center">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label for="max_players" style="font-size:0.85rem;color:#6b7280;white-space:nowrap">Player limit:</label>
         <input type="number" id="max_players" name="max_players" value="{{ lobby.max_players }}"
                min="{{ lobby.player_count }}" max="32" style="width:4rem"
@@ -45,6 +46,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       </form>
       {% if not lobby.is_archived %}
       <form method="post" action="{{ url_for('lobby.lock', lobby_id=lobby.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if lobby.is_locked %}
           <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
         {% else %}
@@ -56,6 +58,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       </form>
       {% endif %}
       <form method="post" action="{{ url_for('lobby.archive', lobby_id=lobby.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if lobby.is_archived %}
           <button type="submit" class="btn btn-secondary" style="font-size:0.85rem">Unarchive</button>
         {% else %}
@@ -65,12 +68,14 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       </form>
       <form method="post" action="{{ url_for('lobby.delete', lobby_id=lobby.id) }}" class="inline"
             onsubmit="return confirm('Delete this lobby and all its savegames?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-danger">Delete Lobby</button>
       </form>
     {% else %}
       {% if not lobby.is_locked %}
       <form method="post" action="{{ url_for('lobby.leave', lobby_id=lobby.id) }}" class="inline"
             onsubmit="return confirm('Leave this lobby?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-secondary">Leave</button>
       </form>
       {% endif %}
@@ -148,6 +153,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
         <span style="font-weight:400;font-size:0.8rem;color:#4b5563">private</span>
       </h3>
       <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="round_number" value="">
         <textarea name="content" rows="3" placeholder="Strategy, reminders…"
                   style="width:100%;box-sizing:border-box;resize:vertical;font-size:0.85rem">{{ general_note.content if general_note else '' }}</textarea>
@@ -222,6 +228,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       </div>
       <form method="post" action="{{ url_for('lobby.save_note', lobby_id=lobby.id) }}"
             style="display:flex;gap:0.4rem;align-items:flex-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div>
           <label style="font-size:0.75rem;display:block;margin-bottom:0.15rem">Rnd #</label>
           <input type="number" name="round_number" min="1" required style="width:4.5rem;margin-bottom:0" placeholder="1"
@@ -241,6 +248,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       {% if lobby.is_locked and lobby.current_member and lobby.current_member.user_id == session['user_id'] %}
         <form method="post" action="{{ url_for('savegame.upload', lobby_id=lobby.id) }}"
               enctype="multipart/form-data" id="upload-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label for="savegame">Savegame File *</label>
           <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem;color:#e0e0e0">
           <label for="note">Note (optional)</label>
@@ -284,6 +292,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
     <!-- Send form -->
     <form method="post" action="{{ url_for('lobby.post_chat', lobby_id=lobby.id) }}"
           style="display:flex;gap:0.5rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="text" name="content" id="chat-input" placeholder="Type a message…"
              maxlength="1000" autocomplete="off"
              style="flex:1;margin-bottom:0">
@@ -316,7 +325,8 @@ function showFeedback(btn, msg, isErr) {
   setTimeout(function(){ s.style.opacity='0'; setTimeout(function(){s.remove();},400); }, 2500);
 }
 function ajaxPost(url, fd, cb) {
-  fetch(url,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd,credentials:'same-origin'})
+  var csrfToken = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+  fetch(url,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','X-CSRFToken':csrfToken},body:fd,credentials:'same-origin'})
     .then(function(r){return r.json();}).then(cb)
     .catch(function(){cb({ok:false,error:'Network error'});});
 }
@@ -661,9 +671,10 @@ if (playerUl) {
     var order = Array.from(playerUl.querySelectorAll('li[data-user-id]')).map(function(l) {
       return parseInt(l.dataset.userId);
     });
+    var csrfToken = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
     fetch(REORDER_URL, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+      headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrfToken},
       body: JSON.stringify({order: order}),
       credentials: 'same-origin'
     }).catch(function(){});

@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import select
 
 from .. import db
 from ..models import User
@@ -17,7 +18,7 @@ def register():
             flash('Username and password are required.')
             return render_template('auth/register.html')
 
-        if User.query.filter_by(username=username).first():
+        if db.session.execute(select(User).filter_by(username=username)).scalar_one_or_none():
             flash('Username already taken.')
             return render_template('auth/register.html')
 
@@ -36,7 +37,7 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
 
-        user = User.query.filter_by(username=username).first()
+        user = db.session.execute(select(User).filter_by(username=username)).scalar_one_or_none()
         if not user or not check_password_hash(user.password_hash, password):
             flash('Invalid username or password.')
             return render_template('auth/login.html')

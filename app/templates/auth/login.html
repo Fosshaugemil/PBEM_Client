@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Login — PBEM Server{% endblock %}
+{% block title %}Login — STRAT//COM{% endblock %}
 {% block content %}
 <div class="card" style="max-width:400px;margin:2rem auto">
   <h2 style="margin-top:0">Login</h2>
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="username">Username</label>
     <input type="text" id="username" name="username" required autofocus>
     <label for="password">Password</label>

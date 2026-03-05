@@ -4,15 +4,20 @@ import uuid
 from flask import Blueprint, request, redirect, url_for, session, flash, abort, current_app, jsonify
 from flask import send_from_directory
 from werkzeug.utils import secure_filename
+from sqlalchemy import select
 
 from .. import db, login_required
-from ..models import Lobby, LobbyMember, SavegameFile
+from ..models import Lobby, LobbyMember, SavegameFile, User
+
+_BLOCKED_EXTENSIONS = {'.exe', '.bat', '.cmd', '.sh', '.ps1', '.py', '.js', '.php', '.rb', '.dll', '.vbs'}
 
 savegame_bp = Blueprint('savegame', __name__)
 
 
 def _assert_member(lobby_id, user_id):
-    if not LobbyMember.query.filter_by(lobby_id=lobby_id, user_id=user_id).first():
+    if not db.session.execute(
+        select(LobbyMember).filter_by(lobby_id=lobby_id, user_id=user_id)
+    ).scalar_one_or_none():
         abort(403)
 
 
@@ -55,6 +60,13 @@ def upload(lobby_id):
         flash('Invalid filename.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
+    ext = os.path.splitext(safe_name)[1].lower()
+    if ext in _BLOCKED_EXTENSIONS:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': 'File type not allowed.'}), 400
+        flash('File type not allowed.')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
     stored_name = f"{uuid.uuid4().hex}_{safe_name}"
     upload_folder = current_app.config['UPLOAD_FOLDER']
     f.save(os.path.join(upload_folder, stored_name))
@@ -82,10 +94,12 @@ def upload(lobby_id):
     # Prune saves more than 2 rounds old (keep current + previous round)
     prune_before = lobby.current_round - 2
     if prune_before >= 1:
-        old_saves = SavegameFile.query.filter(
-            SavegameFile.lobby_id == lobby_id,
-            SavegameFile.round_number <= prune_before,
-        ).all()
+        old_saves = db.session.execute(
+            select(SavegameFile).where(
+                SavegameFile.lobby_id == lobby_id,
+                SavegameFile.round_number <= prune_before,
+            )
+        ).scalars().all()
         for old in old_saves:
             path = os.path.join(upload_folder, old.stored_name)
             if os.path.exists(path):
@@ -96,7 +110,6 @@ def upload(lobby_id):
 
     if is_ajax:
         new_member = lobby.current_member
-        from ..models import User
         uploader = db.session.get(User, session['user_id'])
         return jsonify({
             'ok': True,

@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from datetime import datetime, timezone
+from sqlalchemy import select
 
 from .. import db, login_required
 from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, User
@@ -11,19 +12,19 @@ from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, 
 lobby_bp = Blueprint('lobby', __name__)
 
 
-def _current_user():
-    return db.session.get(User, session['user_id'])
-
-
 def _is_member(lobby_id, user_id):
-    return LobbyMember.query.filter_by(lobby_id=lobby_id, user_id=user_id).first() is not None
+    return db.session.execute(
+        select(LobbyMember).filter_by(lobby_id=lobby_id, user_id=user_id)
+    ).scalar_one_or_none() is not None
 
 
 @lobby_bp.route('/')
 @login_required
 def list_lobbies():
-    lobbies = Lobby.query.order_by(Lobby.created_at.desc()).all()
-    user_lobby_ids = {m.lobby_id for m in LobbyMember.query.filter_by(user_id=session['user_id']).all()}
+    lobbies = db.session.execute(select(Lobby).order_by(Lobby.created_at.desc())).scalars().all()
+    user_lobby_ids = {m.lobby_id for m in db.session.execute(
+        select(LobbyMember).filter_by(user_id=session['user_id'])
+    ).scalars().all()}
     return render_template('lobby/list.html', lobbies=lobbies, user_lobby_ids=user_lobby_ids)
 
 
@@ -73,20 +74,27 @@ def detail(lobby_id):
     if not _is_member(lobby_id, session['user_id']):
         flash('You must join this lobby first.')
         return redirect(url_for('lobby.list_lobbies'))
-    savegames = SavegameFile.query.filter_by(lobby_id=lobby_id).order_by(SavegameFile.uploaded_at.desc()).all()
-    general_note = PlayerNote.query.filter_by(
-        user_id=session['user_id'], lobby_id=lobby_id, round_number=None).first()
-    round_notes = (PlayerNote.query
-                   .filter(PlayerNote.user_id == session['user_id'],
-                           PlayerNote.lobby_id == lobby_id,
-                           PlayerNote.round_number.isnot(None))
-                   .order_by(PlayerNote.round_number.desc())
-                   .all())
+    savegames = db.session.execute(
+        select(SavegameFile).filter_by(lobby_id=lobby_id)
+        .order_by(SavegameFile.uploaded_at.desc())
+    ).scalars().all()
+    general_note = db.session.execute(
+        select(PlayerNote).filter_by(
+            user_id=session['user_id'], lobby_id=lobby_id, round_number=None)
+    ).scalar_one_or_none()
+    round_notes = db.session.execute(
+        select(PlayerNote)
+        .where(PlayerNote.user_id == session['user_id'],
+               PlayerNote.lobby_id == lobby_id,
+               PlayerNote.round_number.isnot(None))
+        .order_by(PlayerNote.round_number.desc())
+    ).scalars().all()
     chat_messages = list(reversed(
-        ChatMessage.query
-        .filter_by(lobby_id=lobby_id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(100).all()
+        db.session.execute(
+            select(ChatMessage).filter_by(lobby_id=lobby_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(100)
+        ).scalars().all()
     ))
     return render_template('lobby/detail.html', lobby=lobby, savegames=savegames,
                            general_note=general_note, round_notes=round_notes,
@@ -134,7 +142,9 @@ def leave(lobby_id):
         flash('Cannot leave while the game is in progress.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
-    member = LobbyMember.query.filter_by(lobby_id=lobby_id, user_id=session['user_id']).first()
+    member = db.session.execute(
+        select(LobbyMember).filter_by(lobby_id=lobby_id, user_id=session['user_id'])
+    ).scalar_one_or_none()
     if member:
         db.session.delete(member)
         db.session.commit()
@@ -231,8 +241,10 @@ def save_note(lobby_id):
             return jsonify({'ok': False, 'error': 'Note cannot be empty.'}), 400
         flash('Note cannot be empty.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
-    existing = PlayerNote.query.filter_by(
-        user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number).first()
+    existing = db.session.execute(
+        select(PlayerNote).filter_by(
+            user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number)
+    ).scalar_one_or_none()
     is_new = existing is None
     if existing:
         existing.content = content
@@ -263,8 +275,10 @@ def delete_note(lobby_id):
             return jsonify({'ok': False, 'error': 'Invalid round number.'}), 400
         flash('Invalid round number.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
-    note = PlayerNote.query.filter_by(
-        user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number).first()
+    note = db.session.execute(
+        select(PlayerNote).filter_by(
+            user_id=session['user_id'], lobby_id=lobby_id, round_number=round_number)
+    ).scalar_one_or_none()
     if note:
         db.session.delete(note)
         db.session.commit()
@@ -301,18 +315,18 @@ def get_messages(lobby_id):
     if not _is_member(lobby_id, session['user_id']):
         abort(403)
     after_str = request.args.get('after', '').rstrip('Z').split('+')[0]
-    query = (ChatMessage.query
-             .filter_by(lobby_id=lobby_id)
-             .order_by(ChatMessage.created_at.asc()))
+    stmt = (select(ChatMessage)
+            .filter_by(lobby_id=lobby_id)
+            .order_by(ChatMessage.created_at.asc()))
     if after_str:
         try:
-            query = query.filter(ChatMessage.created_at > datetime.fromisoformat(after_str))
+            stmt = stmt.where(ChatMessage.created_at > datetime.fromisoformat(after_str))
         except ValueError:
             pass
     return jsonify({'messages': [{
         'id': m.id, 'user_id': m.user_id, 'username': m.user.username,
         'content': m.content, 'created_at': m.created_at.isoformat() + 'Z',
-    } for m in query.limit(50).all()]})
+    } for m in db.session.execute(stmt.limit(50)).scalars().all()]})
 
 
 @lobby_bp.route('/<int:lobby_id>/state')
@@ -322,10 +336,10 @@ def get_state(lobby_id):
         abort(403)
     lobby = db.get_or_404(Lobby, lobby_id)
     cur = lobby.current_member
-    savegames = (SavegameFile.query
-                 .filter_by(lobby_id=lobby_id)
-                 .order_by(SavegameFile.uploaded_at.desc())
-                 .all())
+    savegames = db.session.execute(
+        select(SavegameFile).filter_by(lobby_id=lobby_id)
+        .order_by(SavegameFile.uploaded_at.desc())
+    ).scalars().all()
     return jsonify({
         'current_round': lobby.current_round,
         'current_player_user_id': cur.user_id if cur else None,
