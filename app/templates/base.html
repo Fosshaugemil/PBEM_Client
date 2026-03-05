@@ -347,7 +347,7 @@
     // Initial check using server-rendered timestamps
     refreshUnread(null);
 
-    // Poll for chat + turn state in background every 20 s
+    // Poll ribbon (unread chat + turn badges) every 1 s
     var _tsInFlight = false;
     setInterval(function() {
       if (_tsInFlight || document.visibilityState === 'hidden') return;
@@ -364,7 +364,7 @@
       })
       .catch(function(){})
       .finally(function(){ _tsInFlight = false; });
-    }, 20000);
+    }, 1000);
   })();
   </script>
   {% endif %}

@@ -458,7 +458,7 @@ if (chatForm) {
   });
 }
 
-// Polling
+// Polling — chat runs even when tab is hidden (see CLAUDE.md)
 var pollInFlight=false;
 function poll(){
   if(pollInFlight||!log) return;
@@ -473,7 +473,10 @@ function poll(){
       });
     }).catch(function(){}).finally(function(){pollInFlight=false;});
 }
-var pollTimer=setInterval(function(){ poll(); pollState(); },4000);
+// Chat: always poll, even when tab is not focused
+setInterval(poll, 1000);
+// State: only poll when visible (turn/savegame updates only matter when page is active)
+setInterval(pollState, 1000);
 document.addEventListener('visibilitychange',function(){
   if(document.visibilityState!=='hidden'){ poll(); pollState(); }
 });
