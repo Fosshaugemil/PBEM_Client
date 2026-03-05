@@ -1,12 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from . import db
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
 
     memberships = db.relationship('LobbyMember', back_populates='user', cascade='all, delete-orphan')
     uploads = db.relationship('SavegameFile', back_populates='uploader')
@@ -23,7 +27,7 @@ class Lobby(db.Model):
     current_player_idx = db.Column(db.Integer, default=0, nullable=False)
     current_round = db.Column(db.Integer, default=1, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
 
     owner = db.relationship('User')
     members = db.relationship('LobbyMember', back_populates='lobby', cascade='all, delete-orphan')
@@ -57,7 +61,7 @@ class LobbyMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    joined_at = db.Column(db.DateTime, default=_utcnow)
     play_order = db.Column(db.Integer, nullable=True)  # NULL until game starts
 
     __table_args__ = (db.UniqueConstraint('lobby_id', 'user_id'),)
@@ -74,7 +78,7 @@ class SavegameFile(db.Model):
     stored_name = db.Column(db.String(256), nullable=False)
     round_number = db.Column(db.Integer, default=1)
     note = db.Column(db.String(512), default='')
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_at = db.Column(db.DateTime, default=_utcnow)
 
     lobby = db.relationship('Lobby', back_populates='savegames')
     uploader = db.relationship('User', back_populates='uploads')
@@ -86,7 +90,7 @@ class PlayerNote(db.Model):
     lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
     round_number = db.Column(db.Integer, nullable=True)  # NULL = general note
     content = db.Column(db.Text, nullable=False)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow)
 
 
 class ChatMessage(db.Model):
@@ -94,6 +98,6 @@ class ChatMessage(db.Model):
     lobby_id = db.Column(db.Integer, db.ForeignKey('lobby.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content = db.Column(db.String(1000), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
 
     user = db.relationship('User')

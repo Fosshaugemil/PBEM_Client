@@ -301,6 +301,12 @@ function escHtml(s) {
 function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 }
+function renderTurnBanner(isMyTurn, round, username) {
+  if (isMyTurn) {
+    return '<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round ' + round + '</div>';
+  }
+  return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round ' + round + ' \u2014 Waiting for <strong style="color:#a855f7">' + escHtml(username || '?') + '</strong>\u2026</div>';
+}
 function showFeedback(btn, msg, isErr) {
   var old=btn.parentNode.querySelector('.fb'); if(old) old.remove();
   var s=document.createElement('span'); s.className='fb';
@@ -462,11 +468,7 @@ function pollState() {
         // Update turn banner
         var turnC = document.getElementById('turn-banner-container');
         if (turnC) {
-          if (nowMyTurn) {
-            turnC.innerHTML = '<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round '+data.current_round+'</div>';
-          } else {
-            turnC.innerHTML = '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round '+data.current_round+' \u2014 Waiting for <strong style="color:#a855f7">'+escHtml(data.current_player_username||'?')+'</strong>\u2026</div>';
-          }
+          turnC.innerHTML = renderTurnBanner(nowMyTurn, data.current_round, data.current_player_username);
         }
 
         // Update player list highlights
@@ -608,15 +610,9 @@ if(uploadForm){
       if(!data.ok){showFeedback(btn,'Error: '+(data.error||'failed'),true); return;}
 
       // 1. Update turn banner
-      var round=data.current_round;
-      var nextUser=escHtml(data.current_player_username||'?');
       var turnC=document.getElementById('turn-banner-container');
       if(turnC){
-        if(data.is_my_turn_now){
-          turnC.innerHTML='<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round '+round+'</div>';
-        } else {
-          turnC.innerHTML='<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round '+round+' \u2014 Waiting for <strong style="color:#a855f7">'+nextUser+'</strong>\u2026</div>';
-        }
+        turnC.innerHTML=renderTurnBanner(data.is_my_turn_now, data.current_round, data.current_player_username);
       }
 
       // 2. Swap upload section

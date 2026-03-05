@@ -3,7 +3,7 @@ import os
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash, abort, current_app, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .. import db, login_required
 from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, User
@@ -12,7 +12,7 @@ lobby_bp = Blueprint('lobby', __name__)
 
 
 def _current_user():
-    return User.query.get(session['user_id'])
+    return db.session.get(User, session['user_id'])
 
 
 def _is_member(lobby_id, user_id):
@@ -69,7 +69,7 @@ def create():
 @lobby_bp.route('/<int:lobby_id>')
 @login_required
 def detail(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     if not _is_member(lobby_id, session['user_id']):
         flash('You must join this lobby first.')
         return redirect(url_for('lobby.list_lobbies'))
@@ -96,7 +96,7 @@ def detail(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/join', methods=['POST'])
 @login_required
 def join(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
 
     if _is_member(lobby_id, session['user_id']):
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
@@ -124,7 +124,7 @@ def join(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/leave', methods=['POST'])
 @login_required
 def leave(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
 
     if lobby.owner_id == session['user_id']:
         flash('Owners cannot leave — delete the lobby instead.')
@@ -145,7 +145,7 @@ def leave(lobby_id):
 @login_required
 def edit(lobby_id):
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     if lobby.owner_id != session['user_id']:
         abort(403)
     if lobby.is_locked:
@@ -178,7 +178,7 @@ def edit(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/lock', methods=['POST'])
 @login_required
 def lock(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     if lobby.owner_id != session['user_id']:
         abort(403)
     if lobby.is_locked:
@@ -236,7 +236,7 @@ def save_note(lobby_id):
     is_new = existing is None
     if existing:
         existing.content = content
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     else:
         db.session.add(PlayerNote(user_id=session['user_id'], lobby_id=lobby_id,
                                   round_number=round_number, content=content))
@@ -320,7 +320,7 @@ def get_messages(lobby_id):
 def get_state(lobby_id):
     if not _is_member(lobby_id, session['user_id']):
         abort(403)
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     cur = lobby.current_member
     savegames = (SavegameFile.query
                  .filter_by(lobby_id=lobby_id)
@@ -345,7 +345,7 @@ def get_state(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/reorder', methods=['POST'])
 @login_required
 def reorder(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     if lobby.owner_id != session['user_id']:
         abort(403)
     if lobby.is_locked:
@@ -364,7 +364,7 @@ def reorder(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
 @login_required
 def delete(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
 
     if lobby.owner_id != session['user_id']:
         abort(403)
@@ -385,7 +385,7 @@ def delete(lobby_id):
 @lobby_bp.route('/<int:lobby_id>/archive', methods=['POST'])
 @login_required
 def archive(lobby_id):
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     if lobby.owner_id != session['user_id']:
         abort(403)
     lobby.is_archived = not lobby.is_archived

@@ -20,7 +20,7 @@ def _assert_member(lobby_id, user_id):
 @login_required
 def upload(lobby_id):
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    lobby = Lobby.query.get_or_404(lobby_id)
+    lobby = db.get_or_404(Lobby, lobby_id)
     _assert_member(lobby_id, session['user_id'])
 
     if not lobby.is_locked:
@@ -97,7 +97,7 @@ def upload(lobby_id):
     if is_ajax:
         new_member = lobby.current_member
         from ..models import User
-        uploader = User.query.get(session['user_id'])
+        uploader = db.session.get(User, session['user_id'])
         return jsonify({
             'ok': True,
             'message': f'Savegame uploaded. Turn passed to {next_player}.',
@@ -123,7 +123,7 @@ def upload(lobby_id):
 @savegame_bp.route('/download/<int:file_id>')
 @login_required
 def download(file_id):
-    sg = SavegameFile.query.get_or_404(file_id)
+    sg = db.get_or_404(SavegameFile, file_id)
     _assert_member(sg.lobby_id, session['user_id'])
 
     upload_folder = current_app.config['UPLOAD_FOLDER']
