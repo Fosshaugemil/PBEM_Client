@@ -22,6 +22,7 @@ class Lobby(db.Model):
     description = db.Column(db.String(512), default='')
     password_hash = db.Column(db.String(256), nullable=True)  # NULL = public
     max_players = db.Column(db.Integer, default=4)
+    game_type = db.Column(db.String(32), nullable=True)   # e.g. 'shadow_empire', 'civ4'
     is_locked = db.Column(db.Boolean, default=False, nullable=False)
     is_archived = db.Column(db.Boolean, default=False, nullable=False)
     current_player_idx = db.Column(db.Integer, default=0, nullable=False)
@@ -33,6 +34,11 @@ class Lobby(db.Model):
     members = db.relationship('LobbyMember', back_populates='lobby', cascade='all, delete-orphan')
     savegames = db.relationship('SavegameFile', back_populates='lobby', cascade='all, delete-orphan')
     chat_messages = db.relationship('ChatMessage', cascade='all, delete-orphan')
+
+    @property
+    def has_started(self):
+        """True once at least one savegame has been uploaded (game is underway)."""
+        return len(self.savegames) > 0
 
     @property
     def is_password_protected(self):

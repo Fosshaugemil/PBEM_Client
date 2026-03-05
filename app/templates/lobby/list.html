@@ -1,9 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Lobbies — STRAT//COM{% endblock %}
 {% block content %}
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h2 style="margin:0">Game Lobbies</h2>
   <a href="{{ url_for('lobby.create') }}" class="btn btn-primary">+ New Lobby</a>
+</div>
+
+<!-- Filter tabs -->
+<div style="display:flex;gap:0.5rem;margin-bottom:1.25rem">
+  {% for key, label in [('open','Open'), ('mine','My Games'), ('all','All')] %}
+    <a href="{{ url_for('lobby.list_lobbies', filter=key) }}"
+       style="padding:0.3rem 0.9rem;border-radius:999px;font-size:0.85rem;font-weight:600;text-decoration:none;border:1px solid;
+              {% if active_filter == key %}
+                background:rgba(168,85,247,0.15);color:#a855f7;border-color:rgba(168,85,247,0.6)
+              {% else %}
+                background:transparent;color:#6b7280;border-color:#2a2a3a
+              {% endif %}">
+      {{ label }}
+    </a>
+  {% endfor %}
 </div>
 
 {% if lobbies %}
@@ -13,6 +28,7 @@
       <tr>
         <th>Name</th>
         <th>Description</th>
+        <th>Game</th>
         <th>Players</th>
         <th>Status</th>
         <th>Created by</th>
@@ -27,6 +43,9 @@
           {% if lobby.is_password_protected %}<span class="lock" title="Password protected">&#128274;</span>{% endif %}
         </td>
         <td style="color:#6b7280;font-size:0.9rem">{{ lobby.description or '—' }}</td>
+        <td style="font-size:0.85rem;color:#a855f7">
+          {{ game_display_names.get(lobby.game_type, '—') if lobby.game_type else '—' }}
+        </td>
         <td>{{ lobby.player_count }} / {{ lobby.max_players }}</td>
         <td>
           {% if lobby.is_archived %}
@@ -64,7 +83,13 @@
   </table>
 </div>
 {% else %}
-  <p style="color:#6b7280">No lobbies yet. Create the first one!</p>
+  {% if active_filter == 'open' %}
+    <p style="color:#6b7280">No open lobbies right now. <a href="{{ url_for('lobby.list_lobbies', filter='all') }}" style="color:#a855f7">View all</a> or create a new one!</p>
+  {% elif active_filter == 'mine' %}
+    <p style="color:#6b7280">You haven't joined any lobbies yet.</p>
+  {% else %}
+    <p style="color:#6b7280">No lobbies yet. Create the first one!</p>
+  {% endif %}
 {% endif %}
 
 {% endblock %}

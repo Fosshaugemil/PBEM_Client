@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from .. import db, login_required
 from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, User
+from ..savegame.validators import GAME_VALIDATORS, GAME_DISPLAY_NAMES
 
 lobby_bp = Blueprint('lobby', __name__)
 
@@ -21,11 +22,26 @@ def _is_member(lobby_id, user_id):
 @lobby_bp.route('/')
 @login_required
 def list_lobbies():
-    lobbies = db.session.execute(select(Lobby).order_by(Lobby.created_at.desc())).scalars().all()
+    filt = request.args.get('filter', 'open')  # 'open' | 'mine' | 'all'
+
     user_lobby_ids = {m.lobby_id for m in db.session.execute(
         select(LobbyMember).filter_by(user_id=session['user_id'])
     ).scalars().all()}
-    return render_template('lobby/list.html', lobbies=lobbies, user_lobby_ids=user_lobby_ids)
+
+    stmt = select(Lobby).order_by(Lobby.created_at.desc())
+    if filt == 'open':
+        stmt = stmt.where(Lobby.is_locked == False, Lobby.is_archived == False)  # noqa: E712
+    elif filt == 'mine':
+        stmt = stmt.where(Lobby.id.in_(user_lobby_ids))
+
+    lobbies = db.session.execute(stmt).scalars().all()
+    return render_template(
+        'lobby/list.html',
+        lobbies=lobbies,
+        user_lobby_ids=user_lobby_ids,
+        active_filter=filt,
+        game_display_names=GAME_DISPLAY_NAMES,
+    )
 
 
 @lobby_bp.route('/create', methods=['GET', 'POST'])
@@ -36,10 +52,13 @@ def create():
         description = request.form.get('description', '').strip()
         max_players = request.form.get('max_players', '4')
         password = request.form.get('password', '')
+        game_type = request.form.get('game_type', '').strip() or None
+        if game_type and game_type not in GAME_VALIDATORS:
+            game_type = None
 
         if not name:
             flash('Lobby name is required.')
-            return render_template('lobby/create.html')
+            return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
         try:
             max_players = int(max_players)
@@ -47,7 +66,7 @@ def create():
                 raise ValueError
         except ValueError:
             flash('Max players must be a number >= 2.')
-            return render_template('lobby/create.html')
+            return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
         lobby = Lobby(
             name=name,
@@ -55,6 +74,7 @@ def create():
             max_players=max_players,
             owner_id=session['user_id'],
             password_hash=generate_password_hash(password) if password else None,
+            game_type=game_type,
         )
         db.session.add(lobby)
         db.session.flush()  # get lobby.id before commit
@@ -64,7 +84,7 @@ def create():
         db.session.commit()
         return redirect(url_for('lobby.detail', lobby_id=lobby.id))
 
-    return render_template('lobby/create.html')
+    return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
 
 @lobby_bp.route('/<int:lobby_id>')
@@ -98,7 +118,8 @@ def detail(lobby_id):
     ))
     return render_template('lobby/detail.html', lobby=lobby, savegames=savegames,
                            general_note=general_note, round_notes=round_notes,
-                           chat_messages=chat_messages)
+                           chat_messages=chat_messages,
+                           game_display_names=GAME_DISPLAY_NAMES)
 
 
 @lobby_bp.route('/<int:lobby_id>/join', methods=['POST'])
@@ -192,6 +213,9 @@ def lock(lobby_id):
     if lobby.owner_id != session['user_id']:
         abort(403)
     if lobby.is_locked:
+        if lobby.has_started:
+            flash('Cannot unlock a game once saves have been uploaded — this would corrupt turn order.')
+            return redirect(url_for('lobby.detail', lobby_id=lobby_id))
         lobby.is_locked = False
         for m in lobby.members:
             m.play_order = None

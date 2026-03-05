@@ -30,6 +30,11 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       {% elif lobby.is_locked %}
         <span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(240,228,0,0.5);margin-left:0.4rem">&#128274; In Progress</span>
       {% endif %}
+      {% if lobby.game_type %}
+        <span style="background:rgba(168,85,247,0.12);color:#a855f7;font-size:0.7rem;padding:0.1rem 0.45rem;border-radius:999px;font-weight:600;border:1px solid rgba(168,85,247,0.35);margin-left:0.4rem;vertical-align:middle">
+          {{ game_display_names.get(lobby.game_type, lobby.game_type) }}
+        </span>
+      {% endif %}
     </h2>
     {% if lobby.description %}<p style="color:#6b7280;margin:0">{{ lobby.description }}</p>{% endif %}
   </div>
@@ -49,7 +54,12 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       <form method="post" action="{{ url_for('lobby.lock', lobby_id=lobby.id) }}" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if lobby.is_locked %}
-          <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
+          {% if not lobby.has_started %}
+            <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
+          {% else %}
+            <button type="button" class="btn btn-secondary" disabled
+                    title="Cannot unlock once saves have been uploaded">Unlock Lobby</button>
+          {% endif %}
         {% else %}
           <button type="submit" class="btn btn-primary" id="start-game-btn"
                   {% if lobby.player_count < lobby.max_players %}
