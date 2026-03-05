@@ -186,6 +186,8 @@
     .ribbon-msg-icon { opacity: 0.4; font-size: 0.8rem; line-height: 1; }
     .lobby-tab:hover .ribbon-msg-icon { opacity: 0.75; }
     .lobby-tab.your-turn .ribbon-msg-icon { opacity: 0.8; }
+    .ribbon-msg-icon.unread { opacity: 1; color: #a855f7; animation: ribbon-unread 1.6s ease-in-out infinite; }
+    @keyframes ribbon-unread { 0%,100% { text-shadow: none; } 50% { text-shadow: 0 0 8px rgba(168,85,247,0.8); } }
     @keyframes lobby-pulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,65,0.55); }
       50%       { box-shadow: 0 0 0 6px rgba(0,255,65,0); }
@@ -226,7 +228,9 @@
       {% set is_active = request.path == '/lobbies/' ~ item.lobby.id %}
       <a href="{{ url_for('lobby.detail', lobby_id=item.lobby.id) }}"
          class="lobby-tab{% if item.is_my_turn %} your-turn{% elif is_active %} active-page{% endif %}"
-         data-status="{{ rst }}">
+         data-status="{{ rst }}"
+         data-lobby-id="{{ item.lobby.id }}"
+         data-latest-ts="{{ (item.latest_msg_at.isoformat() + 'Z') if item.latest_msg_at else '' }}">
         {% if item.is_my_turn %}<span>&#9654;</span>{% endif %}
         {{ item.lobby.name }}
         {% if item.lobby.is_locked %}
@@ -287,6 +291,19 @@
        counts.not_started > 0 ? 'not_started' : 'archived');
 
     showCat(defaultCat);
+
+    // Unread chat indicator
+    document.querySelectorAll('#lobby-ribbon .lobby-tab[data-lobby-id]').forEach(function(tab) {
+      var latestTs = tab.dataset.latestTs;
+      if (!latestTs || tab.classList.contains('active-page') || tab.classList.contains('your-turn')) return;
+      try {
+        var seen = parseInt(localStorage.getItem('pbem_seen_' + tab.dataset.lobbyId) || '0', 10);
+        if (new Date(latestTs).getTime() > seen) {
+          var icon = tab.querySelector('.ribbon-msg-icon');
+          if (icon) icon.classList.add('unread');
+        }
+      } catch(e) {}
+    });
   })();
   </script>
   {% endif %}
