@@ -141,7 +141,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
               <span style="color:#4b5563;font-size:0.8rem;min-width:1.4rem">{{ m.play_order + 1 }}.</span>
               {{ m.user.username }}
               {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
-              {% if is_current %}<span style="background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)">&#9654;</span>{% endif %}
+              {% if is_current %}<span class="turn-badge" style="background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)">&#9654;</span>{% endif %}
               {% if is_current and latest_sg %}<span id="player-turn-elapsed" data-ts="{{ latest_sg.uploaded_at.isoformat() }}Z" style="font-size:0.7rem;opacity:0.55;margin-left:0.2rem"></span>{% endif %}
             </li>
           {% endfor %}
@@ -379,6 +379,32 @@ function renderTurnBanner(isMyTurn, round, username, turnStartedAt) {
     : '';
   return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round ' + round + ' \u2014 Waiting for <strong style="color:#a855f7">' + escHtml(username || '?') + '</strong>\u2026' + elapsedHtml + '</div>';
 }
+function updatePlayerHighlights(currentPlayerId, turnStartedAt) {
+  document.querySelectorAll('li[data-user-id]').forEach(function(li) {
+    var uid = parseInt(li.dataset.userId);
+    var cur = uid === currentPlayerId;
+    li.style.fontWeight = cur ? '700' : '';
+    li.style.color = cur ? '#00ff41' : '';
+    // Remove stale badge and elapsed span from every item
+    var oldBadge = li.querySelector('.turn-badge'); if (oldBadge) oldBadge.remove();
+    var oldElapsed = li.querySelector('#player-turn-elapsed'); if (oldElapsed) oldElapsed.remove();
+    if (cur) {
+      var badge = document.createElement('span');
+      badge.className = 'turn-badge';
+      badge.style.cssText = 'background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)';
+      badge.innerHTML = '&#9654;';
+      li.appendChild(badge);
+      if (turnStartedAt) {
+        var el = document.createElement('span');
+        el.id = 'player-turn-elapsed';
+        el.dataset.ts = turnStartedAt;
+        el.style.cssText = 'font-size:0.7rem;opacity:0.55;margin-left:0.2rem';
+        el.textContent = '(' + fmtElapsed(turnStartedAt) + ')';
+        li.appendChild(el);
+      }
+    }
+  });
+}
 function showFeedback(btn, msg, isErr) {
   var old=btn.parentNode.querySelector('.fb'); if(old) old.remove();
   var s=document.createElement('span'); s.className='fb';
@@ -569,13 +595,8 @@ function pollState() {
           turnC.innerHTML = renderTurnBanner(nowMyTurn, data.current_round, data.current_player_username, data.turn_started_at);
         }
 
-        // Update player list highlights
-        document.querySelectorAll('li[data-user-id]').forEach(function(li){
-          var uid = parseInt(li.dataset.userId);
-          var cur = uid === data.current_player_user_id;
-          li.style.fontWeight = cur ? '700' : '';
-          li.style.color = cur ? '#00ff41' : '';
-        });
+        // Update player list highlights (badge + elapsed + colour)
+        updatePlayerHighlights(data.current_player_user_id, data.turn_started_at);
 
         // If turn just became mine, reload to get the upload form
         if (!wasMyTurn && nowMyTurn) { window.location.reload(); return; }
@@ -758,12 +779,8 @@ if(uploadForm){
 
       wasMyTurn=false; updateTabTitle();
 
-      // 3. Update player highlights
-      document.querySelectorAll('li[data-user-id]').forEach(function(li){
-        var uid=parseInt(li.dataset.userId);
-        var cur=uid===data.current_player_user_id;
-        li.style.fontWeight=cur?'700':''; li.style.color=cur?'#00ff41':'';
-      });
+      // 3. Update player highlights (badge + elapsed + colour)
+      updatePlayerHighlights(data.current_player_user_id, data.turn_started_at);
 
       // 4. Prepend new save row (keep history)
       var tbody=document.getElementById('savegames-tbody');
