@@ -263,6 +263,8 @@ CLI stores auth token in `~/.pbem_client.json`. Default server: `http://localhos
 
 3. **Chat is polled, not WebSocket** — the chat system uses interval polling (`GET /<id>/messages`), not WebSockets. Do not introduce async frameworks unless explicitly requested.
 
+   **IMPORTANT — chat poll must stay active when the tab is hidden.** In `detail.html`, the chat `poll()` function intentionally runs on its own `setInterval` *without* a `document.visibilityState` guard. This is by design so that users receive chat notifications (sound + unread badge) even when they have switched tabs. Do **not** add a visibility check to `poll()` or merge it back into the shared state interval. The state poll (`pollState()`) may remain visibility-gated since it only updates visual game-state elements.
+
 4. **Savegame files on disk** — files are stored in the `uploads/` directory on the server filesystem. Cloud deployments (Railway ephemeral) should use external object storage if persistence is required.
 
 5. **The CLI client targets the legacy `server/` API**, not the `app/` blueprints. The two have different endpoints and auth mechanisms (token vs. session).

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ lobby.name }} — PBEM Server{% endblock %}
+{% block title %}{{ lobby.name }} — STRAT//COM{% endblock %}
 {% block content %}
 <script>
 var SESSION_UID = {{ session['user_id'] }};
@@ -30,6 +30,11 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       {% elif lobby.is_locked %}
         <span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(240,228,0,0.5);margin-left:0.4rem">&#128274; In Progress</span>
       {% endif %}
+      {% if lobby.game_type %}
+        <span style="background:rgba(168,85,247,0.12);color:#a855f7;font-size:0.7rem;padding:0.1rem 0.45rem;border-radius:999px;font-weight:600;border:1px solid rgba(168,85,247,0.35);margin-left:0.4rem;vertical-align:middle">
+          {{ game_display_names.get(lobby.game_type, lobby.game_type) }}
+        </span>
+      {% endif %}
     </h2>
     {% if lobby.description %}<p style="color:#6b7280;margin:0">{{ lobby.description }}</p>{% endif %}
   </div>
@@ -49,12 +54,17 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       <form method="post" action="{{ url_for('lobby.lock', lobby_id=lobby.id) }}" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if lobby.is_locked %}
-          <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
+          {% if not lobby.has_started %}
+            <button type="submit" class="btn btn-secondary">Unlock Lobby</button>
+          {% else %}
+            <button type="button" class="btn btn-secondary" disabled
+                    title="Cannot unlock once saves have been uploaded">Unlock Lobby</button>
+          {% endif %}
         {% else %}
           <button type="submit" class="btn btn-primary" id="start-game-btn"
                   {% if lobby.player_count < lobby.max_players %}
-                    disabled title="Lobby must be full to lock ({{ lobby.player_count }}/{{ lobby.max_players }})"
-                  {% endif %}>Start Game</button>
+                    disabled title="Lobby must be full to lock"
+                  {% endif %}>Start Game ({{ lobby.player_count }}/{{ lobby.max_players }})</button>
         {% endif %}
       </form>
       {% endif %}
@@ -84,6 +94,8 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
   </div>
 </div>
 
+{% set latest_sg = (lobby.savegames | sort(attribute='uploaded_at') | last) if lobby.savegames else none %}
+
 <!-- Turn status banner -->
 <div id="turn-banner-container">
 {% if lobby.is_locked %}
@@ -94,6 +106,9 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
   {% else %}
     <div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">
       Round {{ lobby.current_round }} — Waiting for <strong style="color:#a855f7">{{ lobby.current_member.user.username if lobby.current_member else '?' }}</strong>…
+      {% if latest_sg %}
+        <span id="turn-elapsed" data-ts="{{ latest_sg.uploaded_at.isoformat() }}Z" style="font-size:0.8rem;margin-left:0.5rem;opacity:0.6"></span>
+      {% endif %}
     </div>
   {% endif %}
 {% endif %}
@@ -126,7 +141,8 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
               <span style="color:#4b5563;font-size:0.8rem;min-width:1.4rem">{{ m.play_order + 1 }}.</span>
               {{ m.user.username }}
               {% if m.user_id == lobby.owner_id %}<span class="badge badge-owner">owner</span>{% endif %}
-              {% if is_current %}<span style="background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)">&#9654;</span>{% endif %}
+              {% if is_current %}<span class="turn-badge" style="background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)">&#9654;</span>{% endif %}
+              {% if is_current and latest_sg %}<span id="player-turn-elapsed" data-ts="{{ latest_sg.uploaded_at.isoformat() }}Z" style="font-size:0.7rem;opacity:0.55;margin-left:0.2rem"></span>{% endif %}
             </li>
           {% endfor %}
         {% else %}
@@ -170,7 +186,6 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
       <h3 style="margin-top:0;color:#e0e0e0">Savegames</h3>
       <div id="savegames-container">
       {% if savegames %}
-        {% set sg = savegames[0] %}
         <table>
           <thead>
             <tr>
@@ -183,17 +198,21 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
             </tr>
           </thead>
           <tbody id="savegames-tbody">
+            {% for sg in savegames %}
             <tr data-sg-id="{{ sg.id }}">
               <td style="color:#a855f7">{{ sg.round_number }}</td>
               <td style="font-size:0.85rem;word-break:break-all">{{ sg.original_name }}</td>
               <td style="font-size:0.9rem">{{ sg.uploader.username }}</td>
               <td style="color:#6b7280;font-size:0.85rem">{{ sg.note or '—' }}</td>
-              <td style="font-size:0.8rem;white-space:nowrap;color:#4b5563">{{ sg.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</td>
+              <td style="font-size:0.8rem;white-space:nowrap;color:#4b5563">
+                <span data-ts="{{ sg.uploaded_at.isoformat() }}Z">{{ sg.uploaded_at.strftime('%Y-%m-%d %H:%M') }}</span>
+              </td>
               <td>
                 <a href="{{ url_for('savegame.download', file_id=sg.id) }}" class="btn btn-secondary"
                    style="font-size:0.8rem;padding:0.25rem 0.6rem">Download</a>
               </td>
             </tr>
+            {% endfor %}
           </tbody>
         </table>
       {% else %}
@@ -254,6 +273,8 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
           <input type="file" id="savegame" name="savegame" required style="margin-bottom:0.75rem;color:#e0e0e0">
           <label for="note">Note (optional)</label>
           <input type="text" id="note" name="note" placeholder="e.g. took the northern route">
+          <progress id="upload-progress" value="0" max="100"
+                    style="width:100%;display:none;margin-bottom:0.5rem;accent-color:#a855f7"></progress>
           <button type="submit" class="btn btn-primary">Upload &amp; End Turn</button>
         </form>
       {% elif lobby.is_locked %}
@@ -266,8 +287,8 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
   </div><!-- /CENTER column -->
 
   <!-- RIGHT: Chat -->
-  <div class="card" style="padding:1rem" id="chat">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+  <div class="card" style="padding:1rem;display:flex;flex-direction:column;height:460px" id="chat">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;flex-shrink:0">
       <h3 style="margin:0;font-size:1rem;color:#e0e0e0">Lobby Chat</h3>
       <button id="mute-btn" title="Toggle notification sound"
               style="background:none;border:1px solid #2a2a3a;border-radius:4px;padding:0.2rem 0.45rem;cursor:pointer;font-size:0.9rem;color:#9ca3af;line-height:1">🔊</button>
@@ -276,7 +297,7 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
     <!-- Message list -->
     <div id="chat-log"
          data-latest-ts="{{ (chat_messages[-1].created_at.isoformat() + 'Z') if chat_messages else '' }}"
-         style="max-height:300px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+         style="flex:1;min-height:0;overflow-y:auto;border:1px solid #2a2a3a;border-radius:4px;padding:0.6rem;background:#0d0d14;margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
       {% if chat_messages %}
         {% for msg in chat_messages %}
           <div data-msg-id="{{ msg.id }}" style="font-size:0.88rem;line-height:1.4">
@@ -291,14 +312,19 @@ var REORDER_URL     = "{{ url_for('lobby.reorder',      lobby_id=lobby.id) }}";
     </div>
 
     <!-- Send form -->
-    <form method="post" action="{{ url_for('lobby.post_chat', lobby_id=lobby.id) }}"
-          style="display:flex;gap:0.5rem">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="text" name="content" id="chat-input" placeholder="Type a message…"
-             maxlength="1000" autocomplete="off"
-             style="flex:1;margin-bottom:0">
-      <button type="submit" class="btn btn-primary" style="white-space:nowrap">Send</button>
-    </form>
+    <div style="flex-shrink:0">
+      <form method="post" action="{{ url_for('lobby.post_chat', lobby_id=lobby.id) }}"
+            style="display:flex;gap:0.5rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="content" id="chat-input" placeholder="Type a message…"
+               maxlength="1000" autocomplete="off"
+               style="flex:1;margin-bottom:0">
+        <button type="submit" class="btn btn-primary" style="white-space:nowrap">Send</button>
+      </form>
+      <div style="text-align:right;font-size:0.7rem;color:#4b5563;margin-top:0.2rem">
+        <span id="chat-counter">0</span>/1000
+      </div>
+    </div>
   </div>
 
 </div>
@@ -309,15 +335,75 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function fmtTime(iso) {
-  return new Date(iso).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',hour12:false});
+  var d = new Date(iso);
+  var time = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false});
+  var now = new Date();
+  var todayStart    = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  var yesterdayStart = todayStart - 86400000;
+  var msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  if (msgDay === todayStart)    return time;
+  if (msgDay === yesterdayStart) return 'Yesterday ' + time;
+  return d.toLocaleDateString([], {month:'short', day:'numeric'}) + ' ' + time;
 }
-// Convert server-rendered UTC timestamps to local military time
+// Convert server-rendered UTC timestamps to local time
 document.querySelectorAll('[data-ts]').forEach(function(el){ el.textContent = fmtTime(el.dataset.ts); });
-function renderTurnBanner(isMyTurn, round, username) {
+
+// ── Tab title management ────────────────────────────────────────────────────
+var LOBBY_NAME = {{ lobby.name|tojson }};
+var unreadCount = 0;
+function updateTabTitle() {
+  var base = LOBBY_NAME + ' \u2014 STRAT//COM';
+  if (wasMyTurn && unreadCount > 0) {
+    document.title = '\u25B6 YOUR TURN (' + unreadCount + ') \u2014 ' + base;
+  } else if (wasMyTurn) {
+    document.title = '\u25B6 YOUR TURN \u2014 ' + base;
+  } else if (unreadCount > 0) {
+    document.title = '(' + unreadCount + ') ' + base;
+  } else {
+    document.title = base;
+  }
+}
+function fmtElapsed(isoTs) {
+  var secs = Math.floor((Date.now() - new Date(isoTs)) / 1000);
+  if (secs < 60)   return secs + 's';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm';
+  var h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+}
+function renderTurnBanner(isMyTurn, round, username, turnStartedAt) {
   if (isMyTurn) {
     return '<div style="background:rgba(0,255,65,0.1);border:1px solid #00ff41;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;font-weight:700;color:#00ff41;animation:turn-pulse 1.8s ease-in-out infinite">&#9654; IT\'S YOUR TURN \u2014 Round ' + round + '</div>';
   }
-  return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round ' + round + ' \u2014 Waiting for <strong style="color:#a855f7">' + escHtml(username || '?') + '</strong>\u2026</div>';
+  var elapsedHtml = turnStartedAt
+    ? ' <span id="turn-elapsed" data-ts="' + escHtml(turnStartedAt) + '" style="font-size:0.8rem;margin-left:0.5rem;opacity:0.6">(' + fmtElapsed(turnStartedAt) + ')</span>'
+    : '';
+  return '<div style="background:#13131a;border:1px solid #2a2a3a;border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;color:#6b7280">Round ' + round + ' \u2014 Waiting for <strong style="color:#a855f7">' + escHtml(username || '?') + '</strong>\u2026' + elapsedHtml + '</div>';
+}
+function updatePlayerHighlights(currentPlayerId, turnStartedAt) {
+  document.querySelectorAll('li[data-user-id]').forEach(function(li) {
+    var uid = parseInt(li.dataset.userId);
+    var cur = uid === currentPlayerId;
+    li.style.fontWeight = cur ? '700' : '';
+    li.style.color = cur ? '#00ff41' : '';
+    // Remove stale badge and elapsed span from every item
+    var oldBadge = li.querySelector('.turn-badge'); if (oldBadge) oldBadge.remove();
+    var oldElapsed = li.querySelector('#player-turn-elapsed'); if (oldElapsed) oldElapsed.remove();
+    if (cur) {
+      var badge = document.createElement('span');
+      badge.className = 'turn-badge';
+      badge.style.cssText = 'background:rgba(0,255,65,0.15);color:#00ff41;font-size:0.7rem;padding:0.1rem 0.4rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.4)';
+      badge.innerHTML = '&#9654;';
+      li.appendChild(badge);
+      if (turnStartedAt) {
+        var el = document.createElement('span');
+        el.id = 'player-turn-elapsed';
+        el.dataset.ts = turnStartedAt;
+        el.style.cssText = 'font-size:0.7rem;opacity:0.55;margin-left:0.2rem';
+        el.textContent = '(' + fmtElapsed(turnStartedAt) + ')';
+        li.appendChild(el);
+      }
+    }
+  });
 }
 function showFeedback(btn, msg, isErr) {
   var old=btn.parentNode.querySelector('.fb'); if(old) old.remove();
@@ -387,6 +473,14 @@ function playNotifSound() {
   } catch(e) {}
 }
 
+// ── Elapsed-time ticker — banner + player list ───────────────────────────────
+setInterval(function() {
+  ['turn-elapsed', 'player-turn-elapsed'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el && el.dataset.ts) el.textContent = '(' + fmtElapsed(el.dataset.ts) + ')';
+  });
+}, 1000);
+
 // ── State polling setup ─────────────────────────────────────────────────────
 var knownSgIds = new Set();
 document.querySelectorAll('#savegames-tbody tr[data-sg-id]').forEach(function(tr){
@@ -394,7 +488,9 @@ document.querySelectorAll('#savegames-tbody tr[data-sg-id]').forEach(function(tr
 });
 var lastKnownPlayerId = {{ (lobby.current_member.user_id if lobby.current_member else none)|tojson }};
 var wasMyTurn = {{ (lobby.is_locked and lobby.current_member is not none and lobby.current_member.user_id == session['user_id'])|tojson }};
+var knownMemberCount = {{ lobby.player_count }};
 var stateInFlight = false;
+updateTabTitle(); // set initial title from server-rendered state
 
 function buildSgRow(sg) {
   var tr = document.createElement('tr');
@@ -424,7 +520,13 @@ function appendMsg(m) {
   var emp=document.getElementById('chat-empty'); if(emp) emp.remove();
   log.appendChild(buildMsg(m));
   log.scrollTop = log.scrollHeight;
-  if (m.user_id !== SESSION_UID) playNotifSound();
+  if (m.user_id !== SESSION_UID) {
+    playNotifSound();
+    if (document.visibilityState === 'hidden') {
+      unreadCount++;
+      updateTabTitle();
+    }
+  }
   try { localStorage.setItem('pbem_seen_' + LOBBY_ID, Date.now()); } catch(e) {}
 }
 
@@ -447,7 +549,7 @@ if (chatForm) {
   });
 }
 
-// Polling
+// Polling — chat runs even when tab is hidden (see CLAUDE.md)
 var pollInFlight=false;
 function poll(){
   if(pollInFlight||!log) return;
@@ -462,9 +564,16 @@ function poll(){
       });
     }).catch(function(){}).finally(function(){pollInFlight=false;});
 }
-var pollTimer=setInterval(function(){ poll(); pollState(); },4000);
+// Chat: always poll, even when tab is not focused
+setInterval(poll, 1000);
+// State: only poll when visible (turn/savegame updates only matter when page is active)
+setInterval(pollState, 1000);
 document.addEventListener('visibilitychange',function(){
-  if(document.visibilityState!=='hidden'){ poll(); pollState(); }
+  if(document.visibilityState!=='hidden'){
+    unreadCount = 0;
+    updateTabTitle();
+    poll(); pollState();
+  }
 });
 
 // ── Savegame / turn-state polling ───────────────────────────────────────────
@@ -483,27 +592,22 @@ function pollState() {
         // Update turn banner
         var turnC = document.getElementById('turn-banner-container');
         if (turnC) {
-          turnC.innerHTML = renderTurnBanner(nowMyTurn, data.current_round, data.current_player_username);
+          turnC.innerHTML = renderTurnBanner(nowMyTurn, data.current_round, data.current_player_username, data.turn_started_at);
         }
 
-        // Update player list highlights
-        document.querySelectorAll('li[data-user-id]').forEach(function(li){
-          var uid = parseInt(li.dataset.userId);
-          var cur = uid === data.current_player_user_id;
-          li.style.fontWeight = cur ? '700' : '';
-          li.style.color = cur ? '#00ff41' : '';
-        });
+        // Update player list highlights (badge + elapsed + colour)
+        updatePlayerHighlights(data.current_player_user_id, data.turn_started_at);
 
         // If turn just became mine, reload to get the upload form
         if (!wasMyTurn && nowMyTurn) { window.location.reload(); return; }
         wasMyTurn = nowMyTurn;
+        updateTabTitle();
       }
 
-      // Inject new savegame rows — only keep the latest one visible
+      // Prepend any new savegame rows (history stays intact)
       var newSgs = (data.savegames || []).filter(function(sg){ return !knownSgIds.has(sg.id); });
       newSgs.forEach(function(sg){ knownSgIds.add(sg.id); });
       if (newSgs.length > 0) {
-        var latestSg = newSgs[0]; // data.savegames is DESC ordered, newest first
         var tbody = document.getElementById('savegames-tbody');
         if (!tbody) {
           var container = document.getElementById('savegames-container');
@@ -517,9 +621,31 @@ function pollState() {
           tbody = document.getElementById('savegames-tbody');
         }
         if (tbody) {
-          while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
-          tbody.appendChild(buildSgRow(latestSg));
+          // newSgs is DESC (newest first) — reverse so newest ends up at top after insertBefore
+          newSgs.slice().reverse().forEach(function(sg) {
+            tbody.insertBefore(buildSgRow(sg), tbody.firstChild);
+          });
         }
+      }
+
+      // Keep max_players display in sync (owner may have changed it)
+      if (data.max_players !== undefined) {
+        var maxSpan = document.getElementById('lobby-max-display');
+        if (maxSpan && maxSpan.textContent !== String(data.max_players)) {
+          maxSpan.textContent = data.max_players;
+        }
+      }
+
+      // Keep Start Game button in sync with live player count (pre-lock)
+      if (!data.is_locked && data.member_count !== undefined) {
+        var startBtn = document.getElementById('start-game-btn');
+        if (startBtn) {
+          var canStart = data.member_count >= data.max_players;
+          startBtn.disabled = !canStart;
+          startBtn.textContent = 'Start Game (' + data.member_count + '/' + data.max_players + ')';
+        }
+        // Reload when the player list itself changes (join/leave)
+        if (data.member_count !== knownMemberCount) window.location.reload();
       }
     })
     .catch(function(){})
@@ -604,13 +730,14 @@ if(editForm){
         var playerCount=document.querySelectorAll('li[data-user-id]').length;
         var canStart=playerCount>=data.max_players;
         startBtn.disabled=!canStart;
-        startBtn.title=canStart?'':'Lobby must be full to lock ('+playerCount+'/'+data.max_players+')';
+        startBtn.title=canStart?'':'Lobby must be full to lock';
+        startBtn.textContent='Start Game ('+playerCount+'/'+data.max_players+')';
       }
     });
   });
 }
 
-// ── Upload & End Turn (AJAX) ────────────────────────────────────────────────
+// ── Upload & End Turn (XHR with progress) ──────────────────────────────────
 var uploadForm=document.getElementById('upload-form');
 if(uploadForm){
   uploadForm.addEventListener('submit',function(e){
@@ -619,16 +746,29 @@ if(uploadForm){
     if(!file) return;
     if(file.size>64*1024*1024){alert('File exceeds 64 MB limit.'); return;}
     var btn=uploadForm.querySelector('[type=submit]');
-    btn.disabled=true; btn.textContent='Uploading\u2026';
-    ajaxPost(UPLOAD_URL, new FormData(uploadForm), function(data){
+    var progressBar=document.getElementById('upload-progress');
+    var csrfToken=(document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+
+    btn.disabled=true; btn.textContent='Uploading\u2026 0%';
+    if(progressBar){ progressBar.value=0; progressBar.style.display=''; }
+
+    var xhr=new XMLHttpRequest();
+    xhr.upload.addEventListener('progress',function(ev){
+      if(!ev.lengthComputable) return;
+      var pct=Math.round(ev.loaded/ev.total*100);
+      btn.textContent='Uploading\u2026 '+pct+'%';
+      if(progressBar) progressBar.value=pct;
+    });
+    xhr.addEventListener('load',function(){
+      if(progressBar) progressBar.style.display='none';
       btn.disabled=false; btn.textContent='Upload \u0026 End Turn';
+      var data;
+      try{data=JSON.parse(xhr.responseText);}catch(ex){data={ok:false,error:'Parse error'};}
       if(!data.ok){showFeedback(btn,'Error: '+(data.error||'failed'),true); return;}
 
       // 1. Update turn banner
       var turnC=document.getElementById('turn-banner-container');
-      if(turnC){
-        turnC.innerHTML=renderTurnBanner(data.is_my_turn_now, data.current_round, data.current_player_username);
-      }
+      if(turnC) turnC.innerHTML=renderTurnBanner(data.is_my_turn_now, data.current_round, data.current_player_username, data.turn_started_at);
 
       // 2. Swap upload section
       var sec=document.getElementById('upload-section');
@@ -637,26 +777,41 @@ if(uploadForm){
         sec.innerHTML='<p style="color:#4b5563;font-size:0.9rem;margin:0">Not your turn \u2014 upload is disabled.</p>';
       }
 
-      // 3. Update player highlights
-      document.querySelectorAll('li[data-user-id]').forEach(function(li){
-        var uid=parseInt(li.dataset.userId);
-        var cur=uid===data.current_player_user_id;
-        li.style.fontWeight=cur?'700':'';
-        li.style.color=cur?'#00ff41':'';
-      });
+      wasMyTurn=false; updateTabTitle();
 
-      // 4. Replace savegame display with only the new row
+      // 3. Update player highlights (badge + elapsed + colour)
+      updatePlayerHighlights(data.current_player_user_id, data.turn_started_at);
+
+      // 4. Prepend new save row (keep history)
       var tbody=document.getElementById('savegames-tbody');
       var sg=data.savegame;
       if(tbody&&sg){
         var emp=document.getElementById('savegames-empty'); if(emp) emp.remove();
         knownSgIds.add(sg.id);
-        while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
-        tbody.appendChild(buildSgRow(sg));
+        tbody.insertBefore(buildSgRow(sg), tbody.firstChild);
       }
 
       uploadForm.reset();
     });
+    xhr.addEventListener('error',function(){
+      if(progressBar) progressBar.style.display='none';
+      btn.disabled=false; btn.textContent='Upload \u0026 End Turn';
+      showFeedback(btn,'Upload failed \u2014 network error',true);
+    });
+    xhr.open('POST',UPLOAD_URL);
+    xhr.setRequestHeader('X-Requested-With','XMLHttpRequest');
+    xhr.setRequestHeader('X-CSRFToken',csrfToken);
+    xhr.send(new FormData(uploadForm));
+  });
+}
+
+// ── Chat character counter ──────────────────────────────────────────────────
+if(chatInput){
+  chatInput.addEventListener('input',function(){
+    var counter=document.getElementById('chat-counter');
+    if(!counter) return;
+    counter.textContent=chatInput.value.length;
+    counter.style.color=chatInput.value.length>900?'#ef4444':'#4b5563';
   });
 }
 

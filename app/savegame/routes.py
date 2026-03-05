@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from .. import db, login_required
 from ..models import Lobby, LobbyMember, SavegameFile, User
+from .validators import GAME_VALIDATORS, validate_generic
 
 _BLOCKED_EXTENSIONS = {'.exe', '.bat', '.cmd', '.sh', '.ps1', '.py', '.js', '.php', '.rb', '.dll', '.vbs'}
 
@@ -67,6 +68,17 @@ def upload(lobby_id):
         flash('File type not allowed.')
         return redirect(url_for('lobby.detail', lobby_id=lobby_id))
 
+    # Run game-specific savefile validation
+    file_size = f.seek(0, 2) or 0
+    f.seek(0)
+    validator = GAME_VALIDATORS.get(lobby.game_type or 'generic', validate_generic)
+    ok, err_msg = validator(f, safe_name, file_size)
+    if not ok:
+        if is_ajax:
+            return jsonify({'ok': False, 'error': f'Save file rejected: {err_msg}'}), 400
+        flash(f'Save file rejected: {err_msg}')
+        return redirect(url_for('lobby.detail', lobby_id=lobby_id))
+
     stored_name = f"{uuid.uuid4().hex}_{safe_name}"
     upload_folder = current_app.config['UPLOAD_FOLDER']
     f.save(os.path.join(upload_folder, stored_name))
@@ -118,6 +130,7 @@ def upload(lobby_id):
             'current_player_username': new_member.user.username if new_member else None,
             'current_player_user_id': new_member.user_id if new_member else None,
             'is_my_turn_now': new_member is not None and new_member.user_id == session['user_id'],
+            'turn_started_at': sg.uploaded_at.isoformat() + 'Z',
             'savegame': {
                 'id': sg.id,
                 'original_name': sg.original_name,

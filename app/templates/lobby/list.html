@@ -1,9 +1,24 @@
 {% extends "base.html" %}
 {% block title %}Lobbies — STRAT//COM{% endblock %}
 {% block content %}
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
   <h2 style="margin:0">Game Lobbies</h2>
   <a href="{{ url_for('lobby.create') }}" class="btn btn-primary">+ New Lobby</a>
+</div>
+
+<!-- Filter tabs -->
+<div style="display:flex;gap:0.5rem;margin-bottom:1.25rem">
+  {% for key, label in [('open','Open'), ('mine','My Games'), ('all','All')] %}
+    <a href="{{ url_for('lobby.list_lobbies', filter=key) }}"
+       style="padding:0.3rem 0.9rem;border-radius:999px;font-size:0.85rem;font-weight:600;text-decoration:none;border:1px solid;
+              {% if active_filter == key %}
+                background:rgba(168,85,247,0.15);color:#a855f7;border-color:rgba(168,85,247,0.6)
+              {% else %}
+                background:transparent;color:#6b7280;border-color:#2a2a3a
+              {% endif %}">
+      {{ label }}
+    </a>
+  {% endfor %}
 </div>
 
 {% if lobbies %}
@@ -13,6 +28,7 @@
       <tr>
         <th>Name</th>
         <th>Description</th>
+        <th>Game</th>
         <th>Players</th>
         <th>Status</th>
         <th>Created by</th>
@@ -21,14 +37,20 @@
     </thead>
     <tbody>
     {% for lobby in lobbies %}
-      <tr>
+      <tr data-lobby-id="{{ lobby.id }}"
+          data-is-member="{{ 'true' if lobby.id in user_lobby_ids else 'false' }}"
+          data-is-locked="{{ 'true' if lobby.is_locked else 'false' }}"
+          data-is-archived="{{ 'true' if lobby.is_archived else 'false' }}">
         <td>
           {{ lobby.name }}
           {% if lobby.is_password_protected %}<span class="lock" title="Password protected">&#128274;</span>{% endif %}
         </td>
         <td style="color:#6b7280;font-size:0.9rem">{{ lobby.description or '—' }}</td>
-        <td>{{ lobby.player_count }} / {{ lobby.max_players }}</td>
-        <td>
+        <td style="font-size:0.85rem;color:#a855f7">
+          {{ game_display_names.get(lobby.game_type, '—') if lobby.game_type else '—' }}
+        </td>
+        <td data-col="players">{{ lobby.player_count }} / {{ lobby.max_players }}</td>
+        <td data-col="status">
           {% if lobby.is_archived %}
             <span style="background:rgba(107,114,128,0.2);color:#9ca3af;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid #4b5563">Archived</span>
           {% elif lobby.is_locked %}
@@ -38,7 +60,7 @@
           {% endif %}
         </td>
         <td style="font-size:0.9rem">{{ lobby.owner.username }}</td>
-        <td style="text-align:right">
+        <td style="text-align:right" data-col="action">
           {% if lobby.id in user_lobby_ids %}
             <a href="{{ url_for('lobby.detail', lobby_id=lobby.id) }}" class="btn btn-primary">View</a>
           {% elif lobby.is_archived %}
@@ -64,7 +86,123 @@
   </table>
 </div>
 {% else %}
-  <p style="color:#6b7280">No lobbies yet. Create the first one!</p>
+  {% if active_filter == 'open' %}
+    <p style="color:#6b7280">No open lobbies right now. <a href="{{ url_for('lobby.list_lobbies', filter='all') }}" style="color:#a855f7">View all</a> or create a new one!</p>
+  {% elif active_filter == 'mine' %}
+    <p style="color:#6b7280">You haven't joined any lobbies yet.</p>
+  {% else %}
+    <p style="color:#6b7280">No lobbies yet. Create the first one!</p>
+  {% endif %}
 {% endif %}
+
+<script>
+(function() {
+  var activeFilter = new URLSearchParams(window.location.search).get('filter') || 'open';
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function statusBadge(l) {
+    if (l.is_archived) {
+      return '<span style="background:rgba(107,114,128,0.2);color:#9ca3af;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid #4b5563">Archived</span>';
+    } else if (l.is_locked) {
+      return '<span style="background:rgba(240,228,0,0.1);color:#f0e400;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(240,228,0,0.5)">&#128274; In Progress</span>';
+    }
+    return '<span style="background:rgba(0,255,65,0.08);color:#00ff41;font-size:0.75rem;padding:0.15rem 0.5rem;border-radius:999px;font-weight:600;border:1px solid rgba(0,255,65,0.5)">Open</span>';
+  }
+
+  function actionCell(l) {
+    if (l.is_member)   return '<a href="' + esc(l.detail_url) + '" class="btn btn-primary">View</a>';
+    if (l.is_archived) return '<span style="color:#4b5563;font-size:0.9rem">Archived</span>';
+    if (l.is_locked)   return '<span style="color:#4b5563;font-size:0.9rem">Locked</span>';
+    if (l.player_count >= l.max_players) return '<span style="color:#4b5563;font-size:0.9rem">Full</span>';
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var pwInput = l.is_password_protected
+      ? '<input type="password" name="password" placeholder="Lobby password" style="width:140px;display:inline;margin:0 0.5rem 0 0">'
+      : '';
+    return '<form method="post" action="' + esc(l.join_url) + '" class="inline">' +
+           pwInput +
+           '<input type="hidden" name="csrf_token" value="' + esc(csrf) + '">' +
+           '<button type="submit" class="btn btn-primary">Join</button></form>';
+  }
+
+  function buildRow(l) {
+    var tr = document.createElement('tr');
+    tr.dataset.lobbyId  = l.id;
+    tr.dataset.isMember  = l.is_member ? 'true' : 'false';
+    tr.dataset.isLocked  = l.is_locked  ? 'true' : 'false';
+    tr.dataset.isArchived = l.is_archived ? 'true' : 'false';
+    tr.innerHTML =
+      '<td>' + esc(l.name) + (l.is_password_protected ? ' <span class="lock" title="Password protected">&#128274;</span>' : '') + '</td>' +
+      '<td style="color:#6b7280;font-size:0.9rem">' + esc(l.description || '—') + '</td>' +
+      '<td style="font-size:0.85rem;color:#a855f7">' + esc(l.game_display_name) + '</td>' +
+      '<td data-col="players">' + l.player_count + ' / ' + l.max_players + '</td>' +
+      '<td data-col="status">' + statusBadge(l) + '</td>' +
+      '<td style="font-size:0.9rem">' + esc(l.owner_username) + '</td>' +
+      '<td style="text-align:right" data-col="action">' + actionCell(l) + '</td>';
+    return tr;
+  }
+
+  var _inFlight = false;
+  setInterval(function() {
+    if (_inFlight || document.visibilityState === 'hidden') return;
+    _inFlight = true;
+    fetch('/lobbies/list-state?filter=' + encodeURIComponent(activeFilter), {
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+      credentials: 'same-origin'
+    })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+      if (!data || !data.lobbies) return;
+
+      var tbody = document.querySelector('table tbody');
+
+      // If we now have lobbies but the table doesn't exist yet, reload once to
+      // let the server render the full table structure
+      if (!tbody) {
+        if (data.lobbies.length > 0) window.location.reload();
+        return;
+      }
+
+      var serverIds = new Set(data.lobbies.map(function(l) { return l.id; }));
+
+      // Remove rows that are no longer in the filtered set
+      tbody.querySelectorAll('tr[data-lobby-id]').forEach(function(row) {
+        if (!serverIds.has(parseInt(row.dataset.lobbyId))) row.remove();
+      });
+
+      data.lobbies.forEach(function(l) {
+        var row = document.querySelector('tr[data-lobby-id="' + l.id + '"]');
+
+        if (!row) {
+          // New lobby — prepend to top (matches server-side DESC created_at order)
+          tbody.insertBefore(buildRow(l), tbody.firstChild);
+          return;
+        }
+
+        // Update existing row
+        var playerCell = row.querySelector('[data-col=players]');
+        if (playerCell) playerCell.textContent = l.player_count + ' / ' + l.max_players;
+
+        var statusCell = row.querySelector('[data-col=status]');
+        if (statusCell) statusCell.innerHTML = statusBadge(l);
+
+        var isMember  = row.dataset.isMember  === 'true';
+        var wasLocked = row.dataset.isLocked   === 'true';
+        if (!isMember && l.is_locked !== wasLocked) {
+          row.querySelector('[data-col=action]').innerHTML = actionCell(l);
+          row.dataset.isLocked = l.is_locked ? 'true' : 'false';
+        } else if (!isMember && !l.is_locked && l.player_count >= l.max_players) {
+          var ac = row.querySelector('[data-col=action]');
+          if (ac && ac.querySelector('form')) ac.innerHTML = actionCell(l);
+        }
+      });
+    })
+    .catch(function(){})
+    .finally(function(){ _inFlight = false; });
+  }, 1000);
+})();
+</script>
 
 {% endblock %}

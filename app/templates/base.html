@@ -123,6 +123,7 @@
       background: rgba(240,228,0,0.08); border: 1px solid #f0e400;
       color: #f0e400;
       box-shadow: 0 0 10px rgba(240,228,0,0.2);
+      transition: opacity 0.5s ease;
     }
 
     /* ── Card ── */
@@ -186,8 +187,15 @@
     .ribbon-msg-icon { opacity: 0.4; font-size: 0.8rem; line-height: 1; }
     .lobby-tab:hover .ribbon-msg-icon { opacity: 0.75; }
     .lobby-tab.your-turn .ribbon-msg-icon { opacity: 0.8; }
-    .ribbon-msg-icon.unread { opacity: 1; color: #a855f7; animation: ribbon-unread 1.6s ease-in-out infinite; }
-    @keyframes ribbon-unread { 0%,100% { text-shadow: none; } 50% { text-shadow: 0 0 8px rgba(168,85,247,0.8); } }
+    .ribbon-msg-icon.unread {
+      opacity: 1; color: #f0e400; font-size: 1rem;
+      animation: ribbon-unread 0.9s ease-in-out infinite;
+      display: inline-block;
+    }
+    @keyframes ribbon-unread {
+      0%, 100% { transform: scale(1);    text-shadow: 0 0 6px rgba(240,228,0,0.6), 0 0 14px rgba(240,228,0,0.4); }
+      50%       { transform: scale(1.15); text-shadow: 0 0 12px rgba(240,228,0,1),   0 0 28px rgba(240,228,0,0.7), 0 0 48px rgba(240,228,0,0.35); }
+    }
     @keyframes lobby-pulse {
       0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,65,0.55); }
       50%       { box-shadow: 0 0 0 6px rgba(0,255,65,0); }
@@ -234,7 +242,7 @@
         {% if item.is_my_turn %}<span>&#9654;</span>{% endif %}
         {{ item.lobby.name }}
         {% if item.lobby.is_locked %}
-          <span style="opacity:0.65;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
+          <span data-round-badge style="opacity:0.65;font-size:0.75rem">R{{ item.lobby.current_round }}</span>
         {% endif %}
         <span class="ribbon-msg-icon" title="Chat">&#128172;</span>
       </a>
@@ -292,18 +300,72 @@
 
     showCat(defaultCat);
 
-    // Unread chat indicator
-    document.querySelectorAll('#lobby-ribbon .lobby-tab[data-lobby-id]').forEach(function(tab) {
-      var latestTs = tab.dataset.latestTs;
-      if (!latestTs || tab.classList.contains('active-page') || tab.classList.contains('your-turn')) return;
-      try {
-        var seen = parseInt(localStorage.getItem('pbem_seen_' + tab.dataset.lobbyId) || '0', 10);
-        if (new Date(latestTs).getTime() > seen) {
-          var icon = tab.querySelector('.ribbon-msg-icon');
-          if (icon) icon.classList.add('unread');
+    // Unread chat indicator — check on load, then poll for updates
+    function refreshUnread(timestamps) {
+      document.querySelectorAll('#lobby-ribbon .lobby-tab[data-lobby-id]').forEach(function(tab) {
+        var lid = tab.dataset.lobbyId;
+        // Use polled timestamp if available, otherwise fall back to server-rendered value
+        var latestTs = (timestamps && timestamps[lid]) || tab.dataset.latestTs;
+        var icon = tab.querySelector('.ribbon-msg-icon');
+        if (!icon) return;
+        // Don't mark the tab you're actively viewing
+        if (tab.classList.contains('active-page')) {
+          icon.classList.remove('unread');
+          return;
         }
-      } catch(e) {}
-    });
+        if (!latestTs) return;
+        try {
+          var seen = parseInt(localStorage.getItem('pbem_seen_' + lid) || '0', 10);
+          if (new Date(latestTs).getTime() > seen) {
+            icon.classList.add('unread');
+          } else {
+            icon.classList.remove('unread');
+          }
+        } catch(e) {}
+      });
+    }
+
+    function refreshTurns(turns) {
+      document.querySelectorAll('#lobby-ribbon .lobby-tab[data-lobby-id]').forEach(function(tab) {
+        var lid = tab.dataset.lobbyId;
+        var t = turns && turns[lid];
+        var isActive = tab.classList.contains('active-page');
+        if (t) {
+          if (t.is_my_turn && !isActive) {
+            tab.classList.add('your-turn');
+          } else if (!t.is_my_turn) {
+            tab.classList.remove('your-turn');
+          }
+          var badge = tab.querySelector('[data-round-badge]');
+          if (badge) badge.textContent = 'R' + t.current_round;
+        } else {
+          // Lobby no longer locked or no turn data — clear turn class
+          tab.classList.remove('your-turn');
+        }
+      });
+    }
+
+    // Initial check using server-rendered timestamps
+    refreshUnread(null);
+
+    // Poll ribbon (unread chat + turn badges) every 1 s
+    var _tsInFlight = false;
+    setInterval(function() {
+      if (_tsInFlight || document.visibilityState === 'hidden') return;
+      _tsInFlight = true;
+      fetch('/lobbies/chat-timestamps', {
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        credentials: 'same-origin'
+      })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        if (data.timestamps) refreshUnread(data.timestamps);
+        if (data.turns)      refreshTurns(data.turns);
+      })
+      .catch(function(){})
+      .finally(function(){ _tsInFlight = false; });
+    }, 1000);
   })();
   </script>
   {% endif %}
@@ -311,6 +373,14 @@
   {% for msg in get_flashed_messages() %}
     <div class="flash">{{ msg }}</div>
   {% endfor %}
+  <script>
+  document.querySelectorAll('.flash').forEach(function(el) {
+    setTimeout(function() {
+      el.style.opacity = '0';
+      setTimeout(function() { el.remove(); }, 500);
+    }, 4000);
+  });
+  </script>
 
   {% block content %}{% endblock %}
   <script>

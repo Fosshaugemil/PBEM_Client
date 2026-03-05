@@ -4,10 +4,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from .. import db, login_required
 from ..models import ChatMessage, Lobby, LobbyMember, PlayerNote, SavegameFile, User
+from ..savegame.validators import GAME_VALIDATORS, GAME_DISPLAY_NAMES
 
 lobby_bp = Blueprint('lobby', __name__)
 
@@ -21,11 +22,26 @@ def _is_member(lobby_id, user_id):
 @lobby_bp.route('/')
 @login_required
 def list_lobbies():
-    lobbies = db.session.execute(select(Lobby).order_by(Lobby.created_at.desc())).scalars().all()
+    filt = request.args.get('filter', 'open')  # 'open' | 'mine' | 'all'
+
     user_lobby_ids = {m.lobby_id for m in db.session.execute(
         select(LobbyMember).filter_by(user_id=session['user_id'])
     ).scalars().all()}
-    return render_template('lobby/list.html', lobbies=lobbies, user_lobby_ids=user_lobby_ids)
+
+    stmt = select(Lobby).order_by(Lobby.created_at.desc())
+    if filt == 'open':
+        stmt = stmt.where(Lobby.is_locked == False, Lobby.is_archived == False)  # noqa: E712
+    elif filt == 'mine':
+        stmt = stmt.where(Lobby.id.in_(user_lobby_ids))
+
+    lobbies = db.session.execute(stmt).scalars().all()
+    return render_template(
+        'lobby/list.html',
+        lobbies=lobbies,
+        user_lobby_ids=user_lobby_ids,
+        active_filter=filt,
+        game_display_names=GAME_DISPLAY_NAMES,
+    )
 
 
 @lobby_bp.route('/create', methods=['GET', 'POST'])
@@ -36,10 +52,14 @@ def create():
         description = request.form.get('description', '').strip()
         max_players = request.form.get('max_players', '4')
         password = request.form.get('password', '')
+        game_type = request.form.get('game_type', '').strip() or None
+        if not game_type or game_type not in GAME_VALIDATORS:
+            flash('Please select a valid game type.')
+            return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
         if not name:
             flash('Lobby name is required.')
-            return render_template('lobby/create.html')
+            return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
         try:
             max_players = int(max_players)
@@ -47,7 +67,7 @@ def create():
                 raise ValueError
         except ValueError:
             flash('Max players must be a number >= 2.')
-            return render_template('lobby/create.html')
+            return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
         lobby = Lobby(
             name=name,
@@ -55,6 +75,7 @@ def create():
             max_players=max_players,
             owner_id=session['user_id'],
             password_hash=generate_password_hash(password) if password else None,
+            game_type=game_type,
         )
         db.session.add(lobby)
         db.session.flush()  # get lobby.id before commit
@@ -64,7 +85,7 @@ def create():
         db.session.commit()
         return redirect(url_for('lobby.detail', lobby_id=lobby.id))
 
-    return render_template('lobby/create.html')
+    return render_template('lobby/create.html', game_display_names=GAME_DISPLAY_NAMES)
 
 
 @lobby_bp.route('/<int:lobby_id>')
@@ -98,7 +119,8 @@ def detail(lobby_id):
     ))
     return render_template('lobby/detail.html', lobby=lobby, savegames=savegames,
                            general_note=general_note, round_notes=round_notes,
-                           chat_messages=chat_messages)
+                           chat_messages=chat_messages,
+                           game_display_names=GAME_DISPLAY_NAMES)
 
 
 @lobby_bp.route('/<int:lobby_id>/join', methods=['POST'])
@@ -192,6 +214,9 @@ def lock(lobby_id):
     if lobby.owner_id != session['user_id']:
         abort(403)
     if lobby.is_locked:
+        if lobby.has_started:
+            flash('Cannot unlock a game once saves have been uploaded — this would corrupt turn order.')
+            return redirect(url_for('lobby.detail', lobby_id=lobby_id))
         lobby.is_locked = False
         for m in lobby.members:
             m.play_order = None
@@ -340,8 +365,13 @@ def get_state(lobby_id):
         select(SavegameFile).filter_by(lobby_id=lobby_id)
         .order_by(SavegameFile.uploaded_at.desc())
     ).scalars().all()
+    turn_started_at = savegames[0].uploaded_at.isoformat() + 'Z' if savegames else None
     return jsonify({
         'current_round': lobby.current_round,
+        'is_locked': lobby.is_locked,
+        'max_players': lobby.max_players,
+        'member_count': lobby.player_count,
+        'turn_started_at': turn_started_at,
         'current_player_user_id': cur.user_id if cur else None,
         'current_player_username': cur.user.username if cur else None,
         'savegames': [{
@@ -373,6 +403,72 @@ def reorder(lobby_id):
         member_map[uid].play_order = i
     db.session.commit()
     return jsonify({'ok': True})
+
+
+@lobby_bp.route('/chat-timestamps')
+@login_required
+def chat_timestamps():
+    """Lightweight poll used by the ribbon.
+
+    Returns:
+      timestamps  — latest chat message timestamp per lobby
+      turns       — turn state for locked lobbies (is_my_turn, current_round)
+    """
+    memberships = db.session.execute(
+        select(LobbyMember).filter_by(user_id=session['user_id'])
+    ).scalars().all()
+    lobby_ids = [m.lobby_id for m in memberships]
+    timestamps = {}
+    if lobby_ids:
+        for lobby_id, latest in db.session.execute(
+            select(ChatMessage.lobby_id, func.max(ChatMessage.created_at).label('latest'))
+            .where(ChatMessage.lobby_id.in_(lobby_ids))
+            .group_by(ChatMessage.lobby_id)
+        ).all():
+            if latest:
+                timestamps[str(lobby_id)] = latest.isoformat() + 'Z'
+    turns = {}
+    if lobby_ids:
+        for lob in db.session.execute(
+            select(Lobby).where(Lobby.id.in_(lobby_ids), Lobby.is_locked == True)  # noqa: E712
+        ).scalars().all():
+            cur = lob.current_member
+            if cur:
+                turns[str(lob.id)] = {
+                    'is_my_turn': cur.user_id == session['user_id'],
+                    'current_round': lob.current_round,
+                }
+    return jsonify({'timestamps': timestamps, 'turns': turns})
+
+
+@lobby_bp.route('/list-state')
+@login_required
+def list_state():
+    """Slim lobby data for the list page to poll player counts and status."""
+    filt = request.args.get('filter', 'open')
+    user_lobby_ids = {m.lobby_id for m in db.session.execute(
+        select(LobbyMember).filter_by(user_id=session['user_id'])
+    ).scalars().all()}
+    stmt = select(Lobby).order_by(Lobby.created_at.desc())
+    if filt == 'open':
+        stmt = stmt.where(Lobby.is_locked == False, Lobby.is_archived == False)  # noqa: E712
+    elif filt == 'mine':
+        stmt = stmt.where(Lobby.id.in_(user_lobby_ids))
+    return jsonify({'lobbies': [{
+        'id': lob.id,
+        'name': lob.name,
+        'description': lob.description or '',
+        'game_display_name': GAME_DISPLAY_NAMES.get(lob.game_type, '—') if lob.game_type else '—',
+        'is_password_protected': lob.is_password_protected,
+        'owner_username': lob.owner.username,
+        'player_count': lob.player_count,
+        'max_players': lob.max_players,
+        'is_locked': lob.is_locked,
+        'is_archived': lob.is_archived,
+        'is_member': lob.id in user_lobby_ids,
+        'join_url': url_for('lobby.join', lobby_id=lob.id),
+        'detail_url': url_for('lobby.detail', lobby_id=lob.id),
+    } for lob in db.session.execute(stmt).scalars().all()]})
 
 
 @lobby_bp.route('/<int:lobby_id>/delete', methods=['POST'])
